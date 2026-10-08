@@ -1,0 +1,3331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+
+<meta
+  name="viewport"
+  content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+>
+
+<title>AR Dancing Girl</title>
+
+<style>
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+
+  width: 100%;
+  height: 100%;
+
+  overflow: hidden;
+
+  background: #000;
+
+  font-family:
+    "Segoe UI",
+    Arial,
+    sans-serif;
+}
+
+
+/* =========================================================
+   CAMERA
+   ========================================================= */
+
+#camera-feed {
+
+  position: fixed;
+
+  inset: 0;
+
+  width: 100%;
+  height: 100%;
+
+  object-fit: cover;
+
+  z-index: 1;
+
+  background: #000;
+
+  transform: scaleX(1);
+
+}
+
+
+/* =========================================================
+   THREE
+   ========================================================= */
+
+#three-canvas {
+
+  position: fixed;
+
+  inset: 0;
+
+  width: 100%;
+  height: 100%;
+
+  z-index: 2;
+
+  pointer-events: none;
+
+}
+
+
+/* =========================================================
+   START SCREEN
+   ========================================================= */
+
+#start-screen {
+
+  position: fixed;
+
+  inset: 0;
+
+  z-index: 20;
+
+  display: flex;
+
+  flex-direction: column;
+
+  align-items: center;
+
+  justify-content: center;
+
+  text-align: center;
+
+  padding: 25px;
+
+  color: white;
+
+  background:
+    radial-gradient(
+      circle at 50% 40%,
+      #2b1a3d 0%,
+      #0a0714 70%
+    );
+
+}
+
+
+#start-screen h1 {
+
+  margin: 0 0 12px;
+
+  font-size:
+    clamp(
+      2rem,
+      7vw,
+      3.4rem
+    );
+
+  background:
+    linear-gradient(
+      90deg,
+      #ffd166,
+      #ff8fab,
+      #9be8ff
+    );
+
+  -webkit-background-clip: text;
+
+  background-clip: text;
+
+  color: transparent;
+
+}
+
+
+#start-screen p {
+
+  max-width: 600px;
+
+  color: #d8cdf0;
+
+  font-size:
+    clamp(
+      0.9rem,
+      2.5vw,
+      1.15rem
+    );
+
+  line-height: 1.5;
+
+  margin-bottom: 30px;
+
+}
+
+
+#start-btn {
+
+  border: none;
+
+  border-radius: 999px;
+
+  padding:
+    16px 40px;
+
+  font-size: 1.05rem;
+
+  font-weight: 600;
+
+  cursor: pointer;
+
+  color: #1a1130;
+
+  background:
+    linear-gradient(
+      135deg,
+      #ffe1a8,
+      #ff9ecf 55%,
+      #9be8ff
+    );
+
+  box-shadow:
+    0 8px 30px
+    rgba(
+      255,
+      158,
+      207,
+      0.45
+    );
+
+}
+
+
+#start-screen.hidden {
+
+  opacity: 0;
+
+  pointer-events: none;
+
+  transition:
+    opacity 0.5s ease;
+
+}
+
+
+/* =========================================================
+   STATUS
+   ========================================================= */
+
+#status-label {
+
+  position: fixed;
+
+  left: 50%;
+
+  bottom: 25px;
+
+  transform:
+    translateX(-50%);
+
+  z-index: 10;
+
+  color: white;
+
+  background:
+    rgba(
+      0,
+      0,
+      0,
+      0.55
+    );
+
+  padding:
+    9px 18px;
+
+  border-radius: 999px;
+
+  backdrop-filter:
+    blur(8px);
+
+  font-size: 14px;
+
+  opacity: 0;
+
+  pointer-events: none;
+
+  white-space: nowrap;
+
+}
+
+
+#status-label.visible {
+
+  opacity: 1;
+
+}
+
+
+/* =========================================================
+   ERROR
+   ========================================================= */
+
+#error-message {
+
+  position: fixed;
+
+  top: 20px;
+
+  left: 50%;
+
+  transform:
+    translateX(-50%);
+
+  z-index: 30;
+
+  display: none;
+
+  max-width: 90%;
+
+  padding:
+    12px 20px;
+
+  border-radius: 10px;
+
+  color: white;
+
+  background:
+    rgba(
+      130,
+      20,
+      20,
+      0.92
+    );
+
+  text-align: center;
+
+  font-size: 14px;
+
+}
+
+
+/* =========================================================
+   CAMERA MODE
+   ========================================================= */
+
+#camera-mode {
+
+  position: fixed;
+
+  top: 15px;
+
+  right: 15px;
+
+  z-index: 10;
+
+  display: none;
+
+  color: white;
+
+  background:
+    rgba(
+      0,
+      0,
+      0,
+      0.45
+    );
+
+  padding:
+    7px 12px;
+
+  border-radius: 999px;
+
+  font-size: 12px;
+
+  backdrop-filter:
+    blur(8px);
+
+}
+
+</style>
+</head>
+
+
+<body>
+
+
+<!-- =======================================================
+     CAMERA
+     ======================================================= -->
+
+<video
+  id="camera-feed"
+  autoplay
+  playsinline
+  muted
+></video>
+
+
+<!-- =======================================================
+     THREE CANVAS
+     ======================================================= -->
+
+<canvas
+  id="three-canvas"
+></canvas>
+
+
+<!-- CAMERA MODE -->
+
+<div id="camera-mode"></div>
+
+
+<!-- STATUS -->
+
+<div id="status-label">
+  🔎 Looking for a surface...
+</div>
+
+
+<!-- ERROR -->
+
+<div id="error-message"></div>
+
+
+<!-- START -->
+
+<div id="start-screen">
+
+  <h1>
+    🎭 AR MAGIC GIRL
+  </h1>
+
+  <p>
+    Show your hand, phone, laptop or dark surface.
+    The dancing girl appears only when a target is detected.
+  </p>
+
+  <button id="start-btn">
+    START MAGIC
+  </button>
+
+</div>
+
+
+
+<!-- =======================================================
+     THREE.JS
+     ======================================================= -->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+
+
+<!-- =======================================================
+     MEDIAPIPE HANDS
+     ======================================================= -->
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+
+
+<!-- =======================================================
+     TENSORFLOW
+     ======================================================= -->
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+
+
+<!-- =======================================================
+     COCO SSD
+     ======================================================= -->
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+
+
+
+<script>
+
+/* =========================================================
+   ELEMENTS
+   ========================================================= */
+
+const videoEl =
+  document.getElementById(
+    "camera-feed"
+  );
+
+const startScreen =
+  document.getElementById(
+    "start-screen"
+  );
+
+const startBtn =
+  document.getElementById(
+    "start-btn"
+  );
+
+const statusLabel =
+  document.getElementById(
+    "status-label"
+  );
+
+const errorBox =
+  document.getElementById(
+    "error-message"
+  );
+
+const cameraMode =
+  document.getElementById(
+    "camera-mode"
+  );
+
+
+/* =========================================================
+   GLOBAL STATE
+   ========================================================= */
+
+let scene = null;
+
+let camera = null;
+
+let renderer = null;
+
+let clock = null;
+
+let sceneReady = false;
+
+
+/* =========================================================
+   GIRL
+   ========================================================= */
+
+let character = null;
+
+let visualGroup = null;
+
+let girlModel = null;
+
+let mixer = null;
+
+let danceAction = null;
+
+
+/* =========================================================
+   EFFECTS
+   ========================================================= */
+
+let particleSys = null;
+
+let shadowDisc = null;
+
+
+/* =========================================================
+   CAMERA
+   ========================================================= */
+
+let cameraFacing =
+  "user";
+
+let cameraIsMirrored =
+  true;
+
+
+/* =========================================================
+   HAND
+   ========================================================= */
+
+let hands = null;
+
+let handTrackingActive =
+  false;
+
+let primaryVisible =
+  false;
+
+let secondaryVisible =
+  false;
+
+let primaryLM = null;
+
+let secondaryLM = null;
+
+let primaryMissed = 0;
+
+let secondaryMissed = 0;
+
+const MISS_LIMIT = 8;
+
+
+/* =========================================================
+   OBJECT DETECTION
+   ========================================================= */
+
+let objectModel = null;
+
+let objectDetectionReady =
+  false;
+
+let detectedTarget = null;
+
+let lastObjectDetection =
+  0;
+
+const OBJECT_INTERVAL =
+  350;
+
+
+/* =========================================================
+   BLACK SURFACE
+   ========================================================= */
+
+let blackSurfaceTarget =
+  null;
+
+let lastBlackCheck =
+  0;
+
+const BLACK_CHECK_INTERVAL =
+  300;
+
+
+/* =========================================================
+   CURRENT TARGET
+   =========================================================
+
+   Possible values:
+
+   "hand"
+   "phone"
+   "laptop"
+   "table"
+   "black"
+
+   null = GIRL HIDDEN
+   ========================================================= */
+
+let currentTarget =
+  null;
+
+
+/* =========================================================
+   AR POSITION
+   ========================================================= */
+
+const rawAnchor =
+  new THREE.Vector3(
+    0,
+    0,
+    -3
+  );
+
+let rawScaleFactor =
+  0.28;
+
+let rawTiltZ =
+  0;
+
+let rawTiltX =
+  0;
+
+let smoothTilt =
+  0;
+
+let smoothTiltX =
+  0;
+
+
+/* =========================================================
+   PHYSICS
+   ========================================================= */
+
+const physOffset =
+  new THREE.Vector3();
+
+const physVelocity =
+  new THREE.Vector3();
+
+let physRotVelocityZ =
+  0;
+
+let physRotOffsetZ =
+  0;
+
+let squash =
+  1;
+
+let squashVelocity =
+  0;
+
+const SPRING_K =
+  60;
+
+const DAMPING =
+  8;
+
+
+/* =========================================================
+   DANCE
+   ========================================================= */
+
+let danceTime =
+  0;
+
+
+/* =========================================================
+   AUDIO
+   ========================================================= */
+
+let audioCtx =
+  null;
+
+
+/* =========================================================
+   PARTICLE
+   ========================================================= */
+
+function createParticleSystem() {
+
+  const MAX =
+    45;
+
+  const positions =
+    new Float32Array(
+      MAX * 3
+    );
+
+  const geometry =
+    new THREE.BufferGeometry();
+
+  geometry.setAttribute(
+    "position",
+    new THREE.BufferAttribute(
+      positions,
+      3
+    )
+  );
+
+  const material =
+    new THREE.PointsMaterial({
+
+      color:
+        0xfff2b8,
+
+      size:
+        0.045,
+
+      transparent:
+        true,
+
+      opacity:
+        0,
+
+      depthWrite:
+        false
+
+    });
+
+  particleSys =
+    new THREE.Points(
+      geometry,
+      material
+    );
+
+  particleSys.userData.life =
+    0;
+
+  particleSys.userData.velocities =
+    [];
+
+  scene.add(
+    particleSys
+  );
+
+}
+
+
+/* =========================================================
+   SHADOW
+   ========================================================= */
+
+function createShadow() {
+
+  const geometry =
+    new THREE.CircleGeometry(
+      0.16,
+      24
+    );
+
+  const material =
+    new THREE.MeshBasicMaterial({
+
+      color:
+        0x000000,
+
+      transparent:
+        true,
+
+      opacity:
+        0.25
+
+    });
+
+  shadowDisc =
+    new THREE.Mesh(
+      geometry,
+      material
+    );
+
+  shadowDisc.rotation.x =
+    -Math.PI / 2;
+
+  scene.add(
+    shadowDisc
+  );
+
+}
+
+
+/* =========================================================
+   START BUTTON
+   ========================================================= */
+
+startBtn.addEventListener(
+  "click",
+  startCamera
+);
+
+
+/* =========================================================
+   START CAMERA
+   ========================================================= */
+
+async function startCamera() {
+
+  try {
+
+    startBtn.disabled =
+      true;
+
+    startBtn.textContent =
+      "STARTING...";
+
+
+    let stream;
+
+
+    /*
+      FIRST TRY BACK CAMERA.
+
+      This is especially important
+      for phone.
+    */
+
+    try {
+
+      stream =
+        await navigator.mediaDevices
+          .getUserMedia({
+
+            video: {
+
+              facingMode: {
+                exact:
+                  "environment"
+              },
+
+              width: {
+                ideal: 1280
+              },
+
+              height: {
+                ideal: 720
+              }
+
+            },
+
+            audio: false
+
+          });
+
+
+      cameraFacing =
+        "environment";
+
+      cameraIsMirrored =
+        false;
+
+
+    } catch (backError) {
+
+      console.log(
+        "Back camera unavailable. Trying normal camera.",
+        backError
+      );
+
+
+      /*
+        LAPTOP WEBCAM /
+        FRONT CAMERA
+      */
+
+      stream =
+        await navigator.mediaDevices
+          .getUserMedia({
+
+            video: {
+
+              width: {
+                ideal: 1280
+              },
+
+              height: {
+                ideal: 720
+              }
+
+            },
+
+            audio: false
+
+          });
+
+
+      cameraFacing =
+        "user";
+
+      cameraIsMirrored =
+        true;
+
+    }
+
+
+    videoEl.srcObject =
+      stream;
+
+
+    await new Promise(
+      resolve => {
+
+        if (
+          videoEl.readyState >= 1
+        ) {
+
+          resolve();
+
+          return;
+
+        }
+
+
+        videoEl.onloadedmetadata =
+          () => {
+
+            resolve();
+
+          };
+
+      }
+    );
+
+
+    await videoEl.play();
+
+
+    /*
+      Apply mirror.
+    */
+
+    videoEl.style.transform =
+      cameraIsMirrored
+        ? "scaleX(-1)"
+        : "scaleX(1)";
+
+
+    cameraMode.style.display =
+      "block";
+
+
+    cameraMode.textContent =
+      cameraFacing ===
+      "environment"
+        ? "📱 BACK CAMERA"
+        : "💻 WEBCAM";
+
+
+    startScreen.classList.add(
+      "hidden"
+    );
+
+
+    statusLabel.classList.add(
+      "visible"
+    );
+
+
+    initThree();
+
+    initAudio();
+
+    initHandTracking();
+
+    initObjectDetection();
+
+    animate();
+
+
+    statusLabel.textContent =
+      "🔎 Looking for hand, phone, laptop or surface...";
+
+
+  } catch(error) {
+
+    console.error(
+      "CAMERA ERROR:",
+      error
+    );
+
+
+    startBtn.disabled =
+      false;
+
+    startBtn.textContent =
+      "START MAGIC";
+
+
+    if (
+      error.name ===
+      "NotAllowedError"
+    ) {
+
+      showError(
+        "Camera permission denied. Please allow camera permission and reload."
+      );
+
+    } else if (
+      error.name ===
+      "NotFoundError"
+    ) {
+
+      showError(
+        "No camera found."
+      );
+
+    } else if (
+      error.name ===
+      "NotReadableError"
+    ) {
+
+      showError(
+        "Camera is being used by another application."
+      );
+
+    } else {
+
+      showError(
+        error.name +
+        ": " +
+        error.message
+      );
+
+    }
+
+  }
+
+}
+
+
+/* =========================================================
+   ERROR
+   ========================================================= */
+
+function showError(
+  message
+) {
+
+  errorBox.style.display =
+    "block";
+
+  errorBox.textContent =
+    message;
+
+}
+
+
+/* =========================================================
+   THREE INITIALIZATION
+   ========================================================= */
+
+function initThree() {
+
+  const canvas =
+    document.getElementById(
+      "three-canvas"
+    );
+
+
+  scene =
+    new THREE.Scene();
+
+
+  camera =
+    new THREE.PerspectiveCamera(
+
+      55,
+
+      window.innerWidth /
+      window.innerHeight,
+
+      0.1,
+
+      100
+
+    );
+
+
+  camera.position.set(
+    0,
+    0,
+    0
+  );
+
+
+  renderer =
+    new THREE.WebGLRenderer({
+
+      canvas:
+
+        canvas,
+
+      alpha:
+        true,
+
+      antialias:
+        true
+
+    });
+
+
+  renderer.setSize(
+
+    window.innerWidth,
+
+    window.innerHeight
+
+  );
+
+
+  renderer.setPixelRatio(
+
+    Math.min(
+      window.devicePixelRatio,
+      2
+    )
+
+  );
+
+
+  renderer.setClearColor(
+    0x000000,
+    0
+  );
+
+
+  /*
+    LIGHTS
+  */
+
+  const ambient =
+    new THREE.AmbientLight(
+      0xffffff,
+      1.0
+    );
+
+  scene.add(
+    ambient
+  );
+
+
+  const keyLight =
+    new THREE.PointLight(
+      0xfff2d9,
+      1.5,
+      20
+    );
+
+  keyLight.position.set(
+    2,
+    3,
+    2
+  );
+
+  scene.add(
+    keyLight
+  );
+
+
+  const fillLight =
+    new THREE.PointLight(
+      0xa0d8ff,
+      0.8,
+      15
+    );
+
+  fillLight.position.set(
+    -2,
+    -1,
+    2
+  );
+
+  scene.add(
+    fillLight
+  );
+
+
+  /*
+    GIRL ROOT
+
+    IMPORTANT:
+
+    Start HIDDEN.
+  */
+
+  character =
+    new THREE.Group();
+
+  character.visible =
+    false;
+
+  character.position.set(
+    0,
+    0,
+    -3
+  );
+
+  character.scale.setScalar(
+    0.28
+  );
+
+  scene.add(
+    character
+  );
+
+
+  visualGroup =
+    new THREE.Group();
+
+  character.add(
+    visualGroup
+  );
+
+
+  loadGirlModel();
+
+  createParticleSystem();
+
+  createShadow();
+
+
+  clock =
+    new THREE.Clock();
+
+
+  window.addEventListener(
+    "resize",
+    onResize
+  );
+
+
+  sceneReady =
+    true;
+
+}
+
+
+/* =========================================================
+   LOAD GIRL
+   ========================================================= */
+
+function loadGirlModel() {
+
+  const loader =
+    new THREE.GLTFLoader();
+
+
+  /*
+    YOUR FILE
+  */
+
+  const modelURL =
+    "models/girl.glb";
+
+
+  loader.load(
+
+    modelURL,
+
+
+    function(gltf) {
+
+      console.log(
+        "girl.glb loaded"
+      );
+
+
+      girlModel =
+        gltf.scene;
+
+
+      /*
+        CENTER MODEL
+      */
+
+      const box =
+        new THREE.Box3()
+          .setFromObject(
+            girlModel
+          );
+
+
+      const center =
+        new THREE.Vector3();
+
+
+      box.getCenter(
+        center
+      );
+
+
+      girlModel.position.x -=
+        center.x;
+
+      girlModel.position.z -=
+        center.z;
+
+
+      /*
+        FEET TO ZERO
+      */
+
+      const newBox =
+        new THREE.Box3()
+          .setFromObject(
+            girlModel
+          );
+
+
+      girlModel.position.y -=
+        newBox.min.y;
+
+
+      girlModel.traverse(
+        object => {
+
+          if (
+            object.isMesh
+          ) {
+
+            object.castShadow =
+              false;
+
+            object.receiveShadow =
+              false;
+
+          }
+
+        }
+      );
+
+
+      visualGroup.add(
+        girlModel
+      );
+
+
+      /*
+        ANIMATION
+      */
+
+      const animations =
+        gltf.animations || [];
+
+
+      console.log(
+        "Girl animations:",
+        animations.map(
+          a => a.name
+        )
+      );
+
+
+      if (
+        animations.length > 0
+      ) {
+
+        mixer =
+          new THREE.AnimationMixer(
+            girlModel
+          );
+
+
+        let clip =
+          animations.find(
+            a =>
+              /dance|dancing|walk|groove|hip/i
+                .test(
+                  a.name
+                )
+          );
+
+
+        if (!clip) {
+
+          clip =
+            animations[0];
+
+        }
+
+
+        danceAction =
+          mixer.clipAction(
+            clip
+          );
+
+
+        danceAction.setLoop(
+          THREE.LoopRepeat,
+          Infinity
+        );
+
+
+        danceAction.play();
+
+      }
+
+
+      statusLabel.textContent =
+        "🔎 Looking for target...";
+
+    },
+
+
+    function(progress) {
+
+      if (
+        progress.total
+      ) {
+
+        const percent =
+          Math.round(
+
+            progress.loaded /
+            progress.total *
+            100
+
+          );
+
+
+        statusLabel.textContent =
+          "👧 Loading girl " +
+          percent +
+          "%";
+
+      }
+
+    },
+
+
+    function(error) {
+
+      console.error(
+        "girl.glb loading error:",
+        error
+      );
+
+
+      showError(
+        "girl.glb could not be loaded. Check models/girl.glb"
+      );
+
+    }
+
+  );
+
+}
+
+
+/* =========================================================
+   MEDIAPIPE HANDS
+   ========================================================= */
+
+function initHandTracking() {
+
+  if (
+    typeof Hands ===
+    "undefined"
+  ) {
+
+    console.warn(
+      "MediaPipe Hands unavailable."
+    );
+
+    return;
+
+  }
+
+
+  hands =
+    new Hands({
+
+      locateFile:
+        file =>
+
+          "https://cdn.jsdelivr.net/npm/@mediapipe/hands/" +
+          file
+
+    });
+
+
+  hands.setOptions({
+
+    maxNumHands:
+      2,
+
+    modelComplexity:
+      1,
+
+    minDetectionConfidence:
+      0.65,
+
+    minTrackingConfidence:
+      0.6
+
+  });
+
+
+  hands.onResults(
+    onHandResults
+  );
+
+
+  handTrackingActive =
+    true;
+
+
+  async function pump() {
+
+    if (
+      handTrackingActive &&
+      videoEl.readyState >= 2
+    ) {
+
+      try {
+
+        await hands.send({
+
+          image:
+            videoEl
+
+        });
+
+      } catch(error) {
+
+        console.warn(
+          "Hand frame error:",
+          error
+        );
+
+      }
+
+    }
+
+
+    requestAnimationFrame(
+      pump
+    );
+
+  }
+
+
+  pump();
+
+}
+
+
+/* =========================================================
+   HAND RESULTS
+   ========================================================= */
+
+function onHandResults(
+  results
+) {
+
+  const list =
+    results.multiHandLandmarks ||
+    [];
+
+
+  if (
+    list.length === 0
+  ) {
+
+    primaryMissed++;
+
+    secondaryMissed++;
+
+
+    if (
+      primaryMissed >
+      MISS_LIMIT
+    ) {
+
+      primaryVisible =
+        false;
+
+      primaryLM =
+        null;
+
+    }
+
+
+    if (
+      secondaryMissed >
+      MISS_LIMIT
+    ) {
+
+      secondaryVisible =
+        false;
+
+      secondaryLM =
+        null;
+
+    }
+
+
+    return;
+
+  }
+
+
+  primaryMissed =
+    0;
+
+
+  /*
+    FIRST HAND = TARGET
+  */
+
+  const primary =
+    list[0];
+
+
+  primaryVisible =
+    true;
+
+
+  primaryLM =
+    smoothLandmarks(
+      primaryLM,
+      primary
+    );
+
+
+  /*
+    HAND ALWAYS GETS
+    HIGHEST PRIORITY.
+  */
+
+  computeAnchorFromHand(
+    primaryLM
+  );
+
+
+  currentTarget =
+    "hand";
+
+
+  /*
+    SECOND HAND
+  */
+
+  if (
+    list.length > 1
+  ) {
+
+    secondaryMissed =
+      0;
+
+    secondaryVisible =
+      true;
+
+
+    const secondary =
+      list[1];
+
+
+    secondaryLM =
+      smoothLandmarks(
+        secondaryLM,
+        secondary
+      );
+
+  } else {
+
+    secondaryMissed++;
+
+    secondaryVisible =
+      false;
+
+  }
+
+
+  showGirl(
+    "hand"
+  );
+
+}
+
+
+/* =========================================================
+   SMOOTH HAND
+   ========================================================= */
+
+function smoothLandmarks(
+  previous,
+  next
+) {
+
+  if (!previous) {
+
+    return next.map(
+      p => ({
+
+        x:
+          p.x,
+
+        y:
+          p.y,
+
+        z:
+          p.z
+
+      })
+    );
+
+  }
+
+
+  return next.map(
+    (point, index) => ({
+
+      x:
+        THREE.MathUtils.lerp(
+
+          previous[index].x,
+
+          point.x,
+
+          0.4
+
+        ),
+
+      y:
+        THREE.MathUtils.lerp(
+
+          previous[index].y,
+
+          point.y,
+
+          0.4
+
+        ),
+
+      z:
+        THREE.MathUtils.lerp(
+
+          previous[index].z,
+
+          point.z,
+
+          0.4
+
+        )
+
+    })
+  );
+
+}
+
+
+/* =========================================================
+   HAND POSITION
+   ========================================================= */
+
+function computeAnchorFromHand(
+  landmarks
+) {
+
+  const wrist =
+    landmarks[0];
+
+  const index =
+    landmarks[5];
+
+  const middle =
+    landmarks[9];
+
+  const pinky =
+    landmarks[17];
+
+
+  const x =
+    (
+      wrist.x +
+      index.x +
+      middle.x +
+      pinky.x
+    ) / 4;
+
+
+  const y =
+    (
+      wrist.y +
+      index.y +
+      middle.y +
+      pinky.y
+    ) / 4;
+
+
+  const screenX =
+    cameraIsMirrored
+      ? 1 - x
+      : x;
+
+
+  const ndcX =
+    screenX * 2 - 1;
+
+
+  const ndcY =
+    -(y * 2 - 1);
+
+
+  const handSize =
+    Math.hypot(
+
+      middle.x -
+      wrist.x,
+
+      middle.y -
+      wrist.y
+
+    );
+
+
+  const distance =
+    THREE.MathUtils.mapLinear(
+
+      THREE.MathUtils.clamp(
+        handSize,
+        0.08,
+        0.32
+      ),
+
+      0.08,
+      0.32,
+
+      3.8,
+      2.6
+
+    );
+
+
+  const fov =
+    THREE.MathUtils.degToRad(
+      camera.fov
+    );
+
+
+  const halfHeight =
+    distance *
+    Math.tan(
+      fov / 2
+    );
+
+
+  const halfWidth =
+    halfHeight *
+    camera.aspect;
+
+
+  rawAnchor.set(
+
+    ndcX *
+    halfWidth,
+
+    ndcY *
+    halfHeight +
+    0.20,
+
+    -distance
+
+  );
+
+
+  rawScaleFactor =
+    THREE.MathUtils.clamp(
+
+      THREE.MathUtils.mapLinear(
+
+        distance,
+
+        2.6,
+        3.8,
+
+        0.32,
+        0.20
+
+      ),
+
+      0.20,
+      0.35
+
+    );
+
+}
+
+
+/* =========================================================
+   COCO SSD
+   ========================================================= */
+
+async function initObjectDetection() {
+
+  try {
+
+    if (
+      typeof cocoSsd ===
+      "undefined"
+    ) {
+
+      console.warn(
+        "COCO SSD unavailable."
+      );
+
+      return;
+
+    }
+
+
+    statusLabel.textContent =
+      "🤖 Loading object detection...";
+
+
+    objectModel =
+      await cocoSsd.load();
+
+
+    objectDetectionReady =
+      true;
+
+
+    statusLabel.textContent =
+      "🔎 Looking for target...";
+
+
+    detectObjects();
+
+  } catch(error) {
+
+    console.error(
+      "COCO error:",
+      error
+    );
+
+  }
+
+}
+
+
+/* =========================================================
+   OBJECT DETECTION LOOP
+   ========================================================= */
+
+async function detectObjects() {
+
+  if (
+    !objectDetectionReady
+  ) {
+
+    return;
+
+  }
+
+
+  const now =
+    performance.now();
+
+
+  if (
+    now -
+    lastObjectDetection >
+    OBJECT_INTERVAL
+  ) {
+
+    lastObjectDetection =
+      now;
+
+
+    try {
+
+      const predictions =
+        await objectModel.detect(
+          videoEl
+        );
+
+
+      processObjects(
+        predictions
+      );
+
+    } catch(error) {
+
+      console.warn(
+        "Object detection frame error:",
+        error
+      );
+
+    }
+
+  }
+
+
+  requestAnimationFrame(
+    detectObjects
+  );
+
+}
+
+
+/* =========================================================
+   PROCESS OBJECTS
+   ========================================================= */
+
+function processObjects(
+  predictions
+) {
+
+  /*
+    If HAND exists,
+    hand has priority.
+
+    Therefore do not replace it.
+  */
+
+  if (
+    primaryVisible
+  ) {
+
+    return;
+
+  }
+
+
+  const targets =
+    predictions.filter(
+
+      item => (
+
+        item.class ===
+          "cell phone" ||
+
+        item.class ===
+          "laptop" ||
+
+        item.class ===
+          "dining table"
+
+      ) &&
+
+      item.score >
+      0.50
+
+    );
+
+
+  if (
+    targets.length === 0
+  ) {
+
+    detectedTarget =
+      null;
+
+    return;
+
+  }
+
+
+  /*
+    Highest confidence.
+  */
+
+  targets.sort(
+    (a, b) =>
+      b.score -
+      a.score
+  );
+
+
+  const target =
+    targets[0];
+
+
+  const x =
+    target.bbox[0];
+
+  const y =
+    target.bbox[1];
+
+  const width =
+    target.bbox[2];
+
+  const height =
+    target.bbox[3];
+
+
+  detectedTarget = {
+
+    type:
+      target.class,
+
+    x:
+      x +
+      width / 2,
+
+    y:
+      y +
+      height * 0.35,
+
+    width:
+      width,
+
+    height:
+      height,
+
+    score:
+      target.score
+
+  };
+
+
+  /*
+    Position girl on
+    detected object.
+  */
+
+  computeAnchorFromObject(
+    detectedTarget
+  );
+
+
+  /*
+    Show girl.
+  */
+
+  if (
+    target.class ===
+    "cell phone"
+  ) {
+
+    showGirl(
+      "phone"
+    );
+
+  } else if (
+    target.class ===
+    "laptop"
+  ) {
+
+    showGirl(
+      "laptop"
+    );
+
+  } else {
+
+    showGirl(
+      "table"
+    );
+
+  }
+
+}
+
+
+/* =========================================================
+   OBJECT POSITION
+   ========================================================= */
+
+function computeAnchorFromObject(
+  target
+) {
+
+  if (!camera) {
+    return;
+  }
+
+
+  let px =
+    target.x /
+    videoEl.videoWidth;
+
+
+  let py =
+    target.y /
+    videoEl.videoHeight;
+
+
+  if (
+    cameraIsMirrored
+  ) {
+
+    px =
+      1 - px;
+
+  }
+
+
+  const ndcX =
+    px * 2 - 1;
+
+
+  const ndcY =
+    -(py * 2 - 1);
+
+
+  /*
+    Object distance.
+
+    Phone/laptop/table:
+    use stable visual distance.
+  */
+
+  const distance =
+    3.0;
+
+
+  const fov =
+    THREE.MathUtils.degToRad(
+      camera.fov
+    );
+
+
+  const halfHeight =
+    distance *
+    Math.tan(
+      fov / 2
+    );
+
+
+  const halfWidth =
+    halfHeight *
+    camera.aspect;
+
+
+  rawAnchor.set(
+
+    ndcX *
+    halfWidth,
+
+    ndcY *
+    halfHeight,
+
+    -distance
+
+  );
+
+
+  /*
+    Girl size depends
+    on object size.
+  */
+
+  rawScaleFactor =
+    THREE.MathUtils.clamp(
+
+      target.width /
+      videoEl.videoWidth *
+      0.65,
+
+      0.18,
+      0.38
+
+    );
+
+}
+
+
+/* =========================================================
+   BLACK SURFACE DETECTOR
+   =========================================================
+
+   This detects a sufficiently large
+   dark region in the LOWER/MIDDLE
+   camera area.
+
+   It does NOT simply say:
+
+   "if screen is black = girl"
+
+   because that would make the girl
+   appear against a black background.
+
+   ========================================================= */
+
+function detectBlackSurface() {
+
+  const now =
+    performance.now();
+
+
+  if (
+    now -
+    lastBlackCheck <
+    BLACK_CHECK_INTERVAL
+  ) {
+
+    return;
+
+  }
+
+
+  lastBlackCheck =
+    now;
+
+
+  /*
+    Don't use black surface while
+    hand/object exists.
+  */
+
+  if (
+    primaryVisible ||
+    detectedTarget
+  ) {
+
+    blackSurfaceTarget =
+      null;
+
+    return;
+
+  }
+
+
+  const width =
+    160;
+
+  const height =
+    120;
+
+
+  const canvas =
+    document.createElement(
+      "canvas"
+    );
+
+
+  canvas.width =
+    width;
+
+  canvas.height =
+    height;
+
+
+  const ctx =
+    canvas.getContext(
+      "2d",
+      {
+        willReadFrequently:
+          true
+      }
+    );
+
+
+  /*
+    Draw current camera.
+  */
+
+  ctx.drawImage(
+
+    videoEl,
+
+    0,
+    0,
+
+    width,
+    height
+
+  );
+
+
+  const image =
+    ctx.getImageData(
+
+      0,
+      0,
+
+      width,
+      height
+
+    );
+
+
+  const data =
+    image.data;
+
+
+  /*
+    Check central/lower region.
+
+    We deliberately don't check
+    entire screen.
+  */
+
+  let darkCount =
+    0;
+
+  let totalCount =
+    0;
+
+  let sumBrightness =
+    0;
+
+
+  const startX =
+    Math.floor(
+      width * 0.15
+    );
+
+  const endX =
+    Math.floor(
+      width * 0.85
+    );
+
+
+  const startY =
+    Math.floor(
+      height * 0.38
+    );
+
+  const endY =
+    Math.floor(
+      height * 0.90
+    );
+
+
+  for (
+    let y = startY;
+    y < endY;
+    y += 4
+  ) {
+
+    for (
+      let x = startX;
+      x < endX;
+      x += 4
+    ) {
+
+      const index =
+        (
+          y *
+          width +
+          x
+        ) * 4;
+
+
+      const r =
+        data[index];
+
+      const g =
+        data[index + 1];
+
+      const b =
+        data[index + 2];
+
+
+      const brightness =
+        (
+          r +
+          g +
+          b
+        ) / 3;
+
+
+      totalCount++;
+
+
+      sumBrightness +=
+        brightness;
+
+
+      /*
+        Dark pixel.
+      */
+
+      if (
+        brightness <
+        55
+      ) {
+
+        darkCount++;
+
+      }
+
+    }
+
+  }
+
+
+  const darkRatio =
+    darkCount /
+    totalCount;
+
+
+  const averageBrightness =
+    sumBrightness /
+    totalCount;
+
+
+  /*
+    Require LARGE dark region.
+
+    This is intentionally
+    conservative.
+  */
+
+  if (
+    darkRatio >
+      0.58 &&
+
+    averageBrightness <
+      75
+  ) {
+
+    /*
+      Center/lower position.
+    */
+
+    blackSurfaceTarget = {
+
+      x:
+        0.50,
+
+      y:
+        0.64,
+
+      width:
+        0.70,
+
+      height:
+        0.45
+
+    };
+
+  } else {
+
+    blackSurfaceTarget =
+      null;
+
+  }
+
+}
+
+
+/* =========================================================
+   SHOW GIRL
+   ========================================================= */
+
+function showGirl(
+  targetType
+) {
+
+  if (
+    !character
+  ) {
+
+    return;
+
+  }
+
+
+  currentTarget =
+    targetType;
+
+
+  /*
+    IMPORTANT:
+
+    Girl becomes visible ONLY
+    after target detection.
+  */
+
+  character.visible =
+    true;
+
+
+  if (
+    targetType ===
+    "hand"
+  ) {
+
+    statusLabel.textContent =
+      "✋ Dancing on your hand";
+
+
+  } else if (
+    targetType ===
+    "phone"
+  ) {
+
+    statusLabel.textContent =
+      "📱 Dancing on your phone";
+
+
+  } else if (
+    targetType ===
+    "laptop"
+  ) {
+
+    statusLabel.textContent =
+      "💻 Dancing on your laptop";
+
+
+  } else if (
+    targetType ===
+    "table"
+  ) {
+
+    statusLabel.textContent =
+      "🪑 Dancing on the table";
+
+
+  } else if (
+    targetType ===
+    "black"
+  ) {
+
+    statusLabel.textContent =
+      "⬛ Dancing on the surface";
+
+  }
+
+}
+
+
+/* =========================================================
+   HIDE GIRL
+   ========================================================= */
+
+function hideGirl() {
+
+  if (
+    !character
+  ) {
+
+    return;
+
+  }
+
+
+  character.visible =
+    false;
+
+
+  currentTarget =
+    null;
+
+
+  /*
+    Reset physics.
+  */
+
+  physOffset.set(
+    0,
+    0,
+    0
+  );
+
+
+  physVelocity.set(
+    0,
+    0,
+    0
+  );
+
+
+  physRotVelocityZ =
+    0;
+
+  physRotOffsetZ =
+    0;
+
+  squash =
+    1;
+
+  squashVelocity =
+    0;
+
+
+  statusLabel.textContent =
+    "🔎 Looking for hand, phone, laptop or surface...";
+
+}
+
+
+/* =========================================================
+   TARGET MANAGER
+   =========================================================
+
+   THIS IS THE MOST IMPORTANT PART.
+
+   Every frame we decide:
+
+   Is there a target?
+
+   YES:
+      girl visible
+
+   NO:
+      girl hidden
+
+   ========================================================= */
+
+function updateTargetManager() {
+
+  /*
+    HAND = highest priority
+  */
+
+  if (
+    primaryVisible
+  ) {
+
+    return;
+
+  }
+
+
+  /*
+    PHONE / LAPTOP / TABLE
+  */
+
+  if (
+    detectedTarget
+  ) {
+
+    return;
+
+  }
+
+
+  /*
+    BLACK SURFACE
+  */
+
+  detectBlackSurface();
+
+
+  if (
+    blackSurfaceTarget
+  ) {
+
+    computeAnchorFromBlackSurface();
+
+    showGirl(
+      "black"
+    );
+
+    return;
+
+  }
+
+
+  /*
+    NOTHING DETECTED
+
+    GIRL MUST DISAPPEAR.
+  */
+
+  hideGirl();
+
+}
+
+
+/* =========================================================
+   BLACK SURFACE POSITION
+   ========================================================= */
+
+function computeAnchorFromBlackSurface() {
+
+  if (
+    !blackSurfaceTarget ||
+    !camera
+  ) {
+
+    return;
+
+  }
+
+
+  const px =
+    blackSurfaceTarget.x;
+
+
+  const py =
+    blackSurfaceTarget.y;
+
+
+  const ndcX =
+    (
+      px * 2
+    ) - 1;
+
+
+  const ndcY =
+    -(
+      py * 2 - 1
+    );
+
+
+  const distance =
+    3.1;
+
+
+  const fov =
+    THREE.MathUtils.degToRad(
+      camera.fov
+    );
+
+
+  const halfHeight =
+    distance *
+    Math.tan(
+      fov / 2
+    );
+
+
+  const halfWidth =
+    halfHeight *
+    camera.aspect;
+
+
+  rawAnchor.set(
+
+    ndcX *
+    halfWidth,
+
+    ndcY *
+    halfHeight,
+
+    -distance
+
+  );
+
+
+  rawScaleFactor =
+    0.28;
+
+}
+
+
+/* =========================================================
+   DANCE
+   ========================================================= */
+
+function updateDance(
+  delta
+) {
+
+  danceTime +=
+    delta;
+
+
+  if (
+    mixer &&
+    character &&
+    character.visible
+  ) {
+
+    mixer.update(
+      delta
+    );
+
+  }
+
+
+  if (
+    visualGroup &&
+    character &&
+    character.visible
+  ) {
+
+    const bounce =
+      Math.abs(
+
+        Math.sin(
+          danceTime * 4
+        )
+
+      ) * 0.012;
+
+
+    visualGroup.position.y =
+      bounce;
+
+
+    visualGroup.rotation.y =
+      Math.sin(
+        danceTime * 1.2
+      ) * 0.06;
+
+
+    const safeSquash =
+      Math.max(
+        squash,
+        0.01
+      );
+
+
+    visualGroup.scale.x =
+      1 /
+      Math.sqrt(
+        safeSquash
+      );
+
+
+    visualGroup.scale.z =
+      1 /
+      Math.sqrt(
+        safeSquash
+      );
+
+
+    visualGroup.scale.y =
+      safeSquash;
+
+  }
+
+
+  if (
+    character &&
+    character.visible
+  ) {
+
+    character.rotation.z =
+      smoothTilt +
+      physRotOffsetZ;
+
+
+    character.rotation.x =
+      smoothTiltX;
+
+  }
+
+}
+
+
+/* =========================================================
+   CHARACTER MOVEMENT
+   ========================================================= */
+
+function updateCharacter(
+  delta
+) {
+
+  if (
+    !character ||
+    !character.visible
+  ) {
+
+    return;
+
+  }
+
+
+  const amount =
+    Math.min(
+      delta * 10,
+      1
+    );
+
+
+  character.position.x =
+    THREE.MathUtils.lerp(
+
+      character.position.x,
+
+      rawAnchor.x +
+      physOffset.x * 0.20,
+
+      amount
+
+    );
+
+
+  character.position.y =
+    THREE.MathUtils.lerp(
+
+      character.position.y,
+
+      rawAnchor.y +
+      physOffset.y * 0.20,
+
+      amount
+
+    );
+
+
+  character.position.z =
+    THREE.MathUtils.lerp(
+
+      character.position.z,
+
+      rawAnchor.z,
+
+      amount
+
+    );
+
+
+  const targetScale =
+    rawScaleFactor*1.5;
+
+
+  character.scale.setScalar(
+
+    THREE.MathUtils.lerp(
+
+      character.scale.x,
+
+      targetScale,
+
+      Math.min(
+        delta * 8,
+        1
+      )
+
+    )
+
+  );
+
+
+  smoothTilt =
+    THREE.MathUtils.lerp(
+
+      smoothTilt,
+
+      rawTiltZ,
+
+      Math.min(
+        delta * 6,
+        1
+      )
+
+    );
+
+
+  smoothTiltX =
+    THREE.MathUtils.lerp(
+
+      smoothTiltX,
+
+      rawTiltX,
+
+      Math.min(
+        delta * 6,
+        1
+      )
+
+    );
+
+}
+
+
+/* =========================================================
+   PARTICLES
+   ========================================================= */
+
+function updateParticles(
+  delta
+) {
+
+  if (
+    !particleSys ||
+    particleSys.userData.life <= 0
+  ) {
+
+    return;
+
+  }
+
+
+  particleSys.userData.life -=
+    delta;
+
+
+  const attribute =
+    particleSys.geometry
+      .attributes
+      .position;
+
+
+  const velocities =
+    particleSys.userData.velocities;
+
+
+  for (
+    let i = 0;
+    i < attribute.count;
+    i++
+  ) {
+
+    const v =
+      velocities[i];
+
+
+    attribute.setXYZ(
+
+      i,
+
+      attribute.getX(i) +
+      v.x * delta,
+
+      attribute.getY(i) +
+      v.y * delta,
+
+      attribute.getZ(i) +
+      v.z * delta
+
+    );
+
+
+    v.y -=
+      delta * 1.8;
+
+  }
+
+
+  attribute.needsUpdate =
+    true;
+
+
+  particleSys.material.opacity =
+    Math.max(
+      0,
+      particleSys.userData.life /
+      0.6
+    ) * 0.9;
+
+}
+
+
+/* =========================================================
+   SHADOW
+   ========================================================= */
+
+function updateShadow() {
+
+  if (
+    !character ||
+    !shadowDisc ||
+    !character.visible
+  ) {
+
+    if (
+      shadowDisc
+    ) {
+
+      shadowDisc.visible =
+        false;
+
+    }
+
+    return;
+
+  }
+
+
+  shadowDisc.visible =
+    true;
+
+
+  const position =
+    new THREE.Vector3();
+
+
+  character.getWorldPosition(
+    position
+  );
+
+
+  shadowDisc.position.set(
+
+    position.x,
+
+    position.y -
+    0.15,
+
+    position.z
+
+  );
+
+
+  const scale =
+    Math.max(
+      character.scale.x,
+      0.05
+    );
+
+
+  shadowDisc.scale.set(
+
+    scale,
+
+    scale,
+
+    scale
+
+  );
+
+}
+
+
+/* =========================================================
+   AUDIO
+   ========================================================= */
+
+function initAudio() {
+
+  try {
+
+    audioCtx =
+      new (
+        window.AudioContext ||
+        window.webkitAudioContext
+      )();
+
+  } catch(error) {
+
+    console.warn(
+      "Audio unavailable."
+    );
+
+  }
+
+}
+
+
+/* =========================================================
+   RESIZE
+   ========================================================= */
+
+function onResize() {
+
+  if (
+    !camera ||
+    !renderer
+  ) {
+
+    return;
+
+  }
+
+
+  camera.aspect =
+    window.innerWidth /
+    window.innerHeight;
+
+
+  camera.updateProjectionMatrix();
+
+
+  renderer.setSize(
+
+    window.innerWidth,
+
+    window.innerHeight
+
+  );
+
+}
+
+
+/* =========================================================
+   MAIN LOOP
+   ========================================================= */
+
+function animate() {
+
+  requestAnimationFrame(
+    animate
+  );
+
+
+  if (
+    !sceneReady
+  ) {
+
+    return;
+
+  }
+
+
+  const delta =
+    Math.min(
+
+      clock.getDelta(),
+
+      0.1
+
+    );
+
+
+  /*
+    FIRST:
+    Decide whether target exists.
+  */
+
+  updateTargetManager();
+
+
+  /*
+    THEN:
+    Move girl only if visible.
+  */
+
+  updateCharacter(
+    delta
+  );
+
+
+  updateDance(
+    delta
+  );
+
+
+  updateParticles(
+    delta
+  );
+
+
+  updateShadow();
+
+
+  renderer.render(
+    scene,
+    camera
+  );
+
+}
+
+</script>
+
+</body>
+</html>
