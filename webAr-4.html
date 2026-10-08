@@ -1,0 +1,3053 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+
+<meta
+  name="viewport"
+  content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+>
+
+<meta name="theme-color" content="#14163a">
+
+<title>AR Karate Girl</title>
+
+<link
+  href="https://fonts.googleapis.com/css2?family=Bungee&display=swap"
+  rel="stylesheet"
+>
+
+<style>
+
+:root{
+  --ink:#14163a;
+  --lemon:#ffe14a;
+  --coral:#ff4d6d;
+}
+
+html,
+body{
+  margin:0;
+  width:100%;
+  height:100%;
+  overflow:hidden;
+
+  background:var(--ink);
+  color:#fff;
+
+  touch-action:none;
+
+  -webkit-user-select:none;
+  user-select:none;
+
+  -webkit-tap-highlight-color:transparent;
+
+  font-family:system-ui,-apple-system,sans-serif;
+}
+
+#gl{
+  position:fixed;
+  inset:0;
+
+  width:100%;
+  height:100%;
+
+  display:block;
+}
+
+.screen{
+  position:fixed;
+  inset:0;
+
+  z-index:20;
+
+  display:flex;
+  flex-direction:column;
+
+  align-items:center;
+  justify-content:center;
+
+  text-align:center;
+
+  padding:24px;
+
+  background:
+    radial-gradient(
+      circle at 50% 30%,
+      #2b2f7a,
+      var(--ink) 70%
+    );
+}
+
+.screen.sheet{
+  background:
+    linear-gradient(
+      transparent 40%,
+      rgba(20,22,58,.92)
+    );
+
+  justify-content:flex-end;
+
+  padding-bottom:12vh;
+
+  pointer-events:none;
+}
+
+.screen.sheet button{
+  pointer-events:auto;
+}
+
+.hidden{
+  display:none!important;
+}
+
+h1,
+h2,
+button,
+#toast,
+#pop{
+  font-family:
+    Bungee,
+    Impact,
+    'Arial Black',
+    sans-serif;
+
+  font-weight:400;
+}
+
+h1{
+  font-size:min(14vw,68px);
+
+  line-height:.95;
+
+  margin:0 0 14px;
+
+  color:var(--lemon);
+
+  text-shadow:
+    0 4px 0 var(--coral);
+}
+
+h2{
+  font-size:min(9vw,40px);
+
+  margin:0 0 10px;
+
+  color:var(--lemon);
+
+  text-shadow:
+    0 3px 0 var(--coral);
+}
+
+p{
+  max-width:330px;
+
+  margin:0 0 26px;
+
+  line-height:1.45;
+
+  opacity:.92;
+}
+
+button{
+  font-size:20px;
+
+  padding:16px 30px;
+
+  border:0;
+
+  border-radius:14px;
+
+  background:var(--lemon);
+
+  color:var(--ink);
+
+  box-shadow:
+    0 5px 0 var(--coral);
+
+  cursor:pointer;
+}
+
+button:active{
+  transform:translateY(4px);
+
+  box-shadow:
+    0 1px 0 var(--coral);
+}
+
+#hud{
+  position:fixed;
+
+  z-index:10;
+
+  left:12px;
+
+  top:
+    calc(
+      env(safe-area-inset-top,0px)
+      + 10px
+    );
+
+  font-size:22px;
+
+  letter-spacing:2px;
+
+  background:
+    rgba(20,22,58,.55);
+
+  padding:4px 12px;
+
+  border-radius:20px;
+
+  pointer-events:none;
+}
+
+#hint,
+#note{
+  position:fixed;
+
+  z-index:10;
+
+  left:50%;
+
+  transform:translateX(-50%);
+
+  max-width:88vw;
+
+  text-align:center;
+
+  font-size:15px;
+
+  background:
+    rgba(20,22,58,.78);
+
+  padding:9px 16px;
+
+  border-radius:20px;
+
+  pointer-events:none;
+}
+
+#hint{
+  bottom:
+    calc(
+      env(safe-area-inset-bottom,0px)
+      + 22px
+    );
+}
+
+#note{
+  top:
+    calc(
+      env(safe-area-inset-top,0px)
+      + 56px
+    );
+
+  background:
+    rgba(255,77,109,.9);
+}
+
+#toast{
+  position:fixed;
+
+  z-index:30;
+
+  left:0;
+  right:0;
+
+  top:32%;
+
+  text-align:center;
+
+  font-size:min(11vw,52px);
+
+  color:var(--lemon);
+
+  -webkit-text-stroke:2px var(--ink);
+
+  text-shadow:
+    0 4px 0 var(--coral);
+
+  pointer-events:none;
+
+  opacity:0;
+}
+
+#toast.show{
+  animation:
+    pop 1.3s ease-out forwards;
+}
+
+#pop{
+  position:fixed;
+
+  z-index:30;
+
+  font-size:34px;
+
+  color:#fff;
+
+  -webkit-text-stroke:2px var(--coral);
+
+  pointer-events:none;
+
+  opacity:0;
+
+  transform:
+    translate(-50%,-50%);
+}
+
+#pop.show{
+  animation:
+    pop .6s ease-out forwards;
+}
+
+/*
+  AR RETICLE
+*/
+
+#reticle2d{
+  position:fixed;
+
+  z-index:8;
+
+  left:50%;
+  top:50%;
+
+  width:70px;
+  height:70px;
+
+  transform:
+    translate(-50%,-50%);
+
+  border:
+    3px solid var(--lemon);
+
+  border-radius:50%;
+
+  box-shadow:
+    0 0 18px rgba(255,225,74,.75);
+
+  display:none;
+
+  pointer-events:none;
+}
+
+#reticle2d::before{
+  content:"";
+
+  position:absolute;
+
+  left:50%;
+  top:50%;
+
+  width:10px;
+  height:10px;
+
+  transform:
+    translate(-50%,-50%);
+
+  border-radius:50%;
+
+  background:var(--coral);
+}
+
+#reticle2d.ready{
+  animation:
+    reticlePulse 1s infinite;
+}
+
+@keyframes reticlePulse{
+
+  0%{
+    transform:
+      translate(-50%,-50%)
+      scale(.92);
+  }
+
+  50%{
+    transform:
+      translate(-50%,-50%)
+      scale(1.05);
+  }
+
+  100%{
+    transform:
+      translate(-50%,-50%)
+      scale(.92);
+  }
+
+}
+
+@keyframes pop{
+
+  0%{
+    opacity:0;
+    scale:.4;
+  }
+
+  18%{
+    opacity:1;
+    scale:1.15;
+  }
+
+  30%{
+    scale:1;
+  }
+
+  80%{
+    opacity:1;
+  }
+
+  100%{
+    opacity:0;
+    scale:1;
+  }
+
+}
+
+</style>
+</head>
+
+<body>
+
+<!-- THREE.JS CANVAS -->
+<canvas id="gl"></canvas>
+
+<!-- HUD -->
+<div id="hud" class="hidden">
+  ❤️ ❤️
+</div>
+
+<!-- 2D RETICLE -->
+<div id="reticle2d"></div>
+
+<!-- HINT -->
+<div id="hint" class="hidden"></div>
+
+<!-- NOTE -->
+<div id="note" class="hidden"></div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- HIT TEXT -->
+<div id="pop">
+  HIT!
+</div>
+
+<!-- INTRO -->
+<div id="intro" class="screen">
+
+  <h1>
+    🥋 AR KARATE
+    <br>
+    GIRL
+  </h1>
+
+  <p>
+    Point your camera at a table or floor.
+    <br>
+    Wait for the yellow target.
+    <br>
+    Tap the detected surface to place her.
+  </p>
+
+  <button id="start">
+    START AR
+  </button>
+
+</div>
+
+<!-- ERROR SCREEN -->
+<div id="msg" class="screen hidden">
+
+  <h2 id="msgT"></h2>
+
+  <p id="msgB"></p>
+
+  <button onclick="location.reload()">
+    TRY AGAIN
+  </button>
+
+</div>
+
+<!-- GAME OVER -->
+<div id="ko" class="screen sheet hidden">
+
+  <h2>
+    💥 KNOCKED OUT!
+  </h2>
+
+  <button id="again">
+    PLAY AGAIN
+  </button>
+
+</div>
+
+
+<!-- THREE.JS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<!-- GLTF LOADER -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+
+<!-- MEDIAPIPE HANDS -->
+<script
+  src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js"
+  crossorigin="anonymous">
+</script>
+
+
+<script>
+
+/* =========================================================
+   SETTINGS
+========================================================= */
+
+const GIRL_SIZE = 0.35;
+
+const PUNCH_COOLDOWN = 1000;
+
+const MODEL_URL =
+  'models/girl.glb';
+
+const MODEL_YAW = 0;
+
+
+/* =========================================================
+   HELPERS
+========================================================= */
+
+const $ =
+  id => document.getElementById(id);
+
+
+let state = 'INTRO';
+
+let health = 2;
+
+let lastHit = 0;
+
+let timers = [];
+
+let weak = false;
+
+let hands = null;
+
+let handsOK = false;
+
+let busy = false;
+
+let lastSend = 0;
+
+const hist = [];
+
+
+const after =
+  (ms,fn) => {
+
+    timers.push(
+      setTimeout(fn,ms)
+    );
+
+  };
+
+
+/* =========================================================
+   VOICE
+========================================================= */
+
+let voice = null;
+
+
+function pickVoice(){
+
+  if(
+    !('speechSynthesis' in window)
+  ){
+    return;
+  }
+
+  const voices =
+    speechSynthesis.getVoices();
+
+  voice =
+    voices.find(v =>
+      /^en/i.test(v.lang) &&
+      /female|samantha|zira|aria|jenny|karen|victoria|susan|moira|tessa/i
+        .test(v.name)
+    )
+    ||
+    voices.find(v =>
+      /^en/i.test(v.lang)
+    )
+    ||
+    null;
+
+}
+
+
+function unlockSpeech(){
+
+  if(
+    !('speechSynthesis' in window)
+  ){
+    return;
+  }
+
+  try{
+
+    pickVoice();
+
+    speechSynthesis.onvoiceschanged =
+      pickVoice;
+
+    const u =
+      new SpeechSynthesisUtterance(' ');
+
+    u.volume = 0;
+
+    speechSynthesis.speak(u);
+
+  }catch(e){}
+
+}
+
+
+function speak(text){
+
+  if(
+    !('speechSynthesis' in window)
+  ){
+    return;
+  }
+
+  try{
+
+    speechSynthesis.cancel();
+
+    const u =
+      new SpeechSynthesisUtterance(text);
+
+    if(voice){
+
+      u.voice = voice;
+
+      u.lang = voice.lang;
+
+    }else{
+
+      u.lang = 'en-US';
+
+    }
+
+    u.rate = 1.05;
+
+    u.pitch = 1.25;
+
+    u.volume = 1;
+
+    speechSynthesis.speak(u);
+
+  }catch(e){}
+
+}
+
+
+/* =========================================================
+   UI
+========================================================= */
+
+function hearts(){
+
+  $('hud').textContent =
+    health === 2
+      ? '❤️ ❤️'
+      : health === 1
+        ? '❤️ 🖤'
+        : '🖤 🖤';
+
+}
+
+
+function restart(el,cls){
+
+  el.classList.remove(cls);
+
+  void el.offsetWidth;
+
+  el.classList.add(cls);
+
+}
+
+
+function toast(t){
+
+  $('toast').textContent = t;
+
+  restart(
+    $('toast'),
+    'show'
+  );
+
+}
+
+
+function hint(t){
+
+  const h =
+    $('hint');
+
+  if(!t){
+
+    h.classList.add(
+      'hidden'
+    );
+
+    return;
+
+  }
+
+  h.textContent = t;
+
+  h.classList.remove(
+    'hidden'
+  );
+
+}
+
+
+let noteTimer;
+
+
+function note(t){
+
+  const n =
+    $('note');
+
+  n.textContent = t;
+
+  n.classList.remove(
+    'hidden'
+  );
+
+  clearTimeout(
+    noteTimer
+  );
+
+  noteTimer =
+    setTimeout(
+      () =>
+        n.classList.add(
+          'hidden'
+        ),
+      4000
+    );
+
+}
+
+
+function fail(title,body){
+
+  $('intro')
+    .classList
+    .add('hidden');
+
+  $('msgT').textContent =
+    title;
+
+  $('msgB').textContent =
+    body;
+
+  $('msg')
+    .classList
+    .remove('hidden');
+
+}
+
+
+/* =========================================================
+   THREE.JS
+========================================================= */
+
+const renderer =
+  new THREE.WebGLRenderer({
+
+    canvas:$('gl'),
+
+    alpha:true,
+
+    antialias:true,
+
+    powerPreference:
+      'high-performance'
+
+  });
+
+
+renderer.setPixelRatio(
+  Math.min(
+    window.devicePixelRatio || 1,
+    2
+  )
+);
+
+renderer.outputEncoding =
+  THREE.sRGBEncoding;
+
+renderer.xr.enabled = true;
+
+
+const scene =
+  new THREE.Scene();
+
+
+const camera =
+  new THREE.PerspectiveCamera(
+    65,
+    innerWidth / innerHeight,
+    .01,
+    50
+  );
+
+
+scene.add(
+  new THREE.HemisphereLight(
+    0xffffff,
+    0x8899aa,
+    1.1
+  )
+);
+
+
+const sun =
+  new THREE.DirectionalLight(
+    0xffffff,
+    1
+  );
+
+sun.position.set(
+  1,
+  2,
+  1.5
+);
+
+scene.add(sun);
+
+
+function resize(){
+
+  renderer.setSize(
+    innerWidth,
+    innerHeight,
+    false
+  );
+
+  camera.aspect =
+    innerWidth /
+    innerHeight;
+
+  camera.updateProjectionMatrix();
+
+}
+
+
+addEventListener(
+  'resize',
+  resize
+);
+
+resize();
+
+
+/* =========================================================
+   AR VARIABLES
+========================================================= */
+
+let xrSession = null;
+
+let hitTestSource = null;
+
+let localReferenceSpace = null;
+
+let arStarted = false;
+
+let surfaceReady = false;
+
+let placed = false;
+
+
+/* =========================================================
+   AR RETICLE
+========================================================= */
+
+const reticle =
+  new THREE.Group();
+
+reticle.visible = false;
+
+
+const reticleRing =
+  new THREE.Mesh(
+
+    new THREE.RingGeometry(
+      .07,
+      .085,
+      32
+    ).rotateX(
+      -Math.PI / 2
+    ),
+
+    new THREE.MeshBasicMaterial({
+
+      color:0xffe14a,
+
+      transparent:true,
+
+      opacity:.95,
+
+      side:THREE.DoubleSide
+
+    })
+
+  );
+
+
+const reticleCenter =
+  new THREE.Mesh(
+
+    new THREE.CircleGeometry(
+      .014,
+      16
+    ).rotateX(
+      -Math.PI / 2
+    ),
+
+    new THREE.MeshBasicMaterial({
+      color:0xff4d6d
+    })
+
+  );
+
+
+reticle.add(
+  reticleRing
+);
+
+reticle.add(
+  reticleCenter
+);
+
+scene.add(reticle);
+
+
+/* =========================================================
+   GIRL GROUP
+========================================================= */
+
+const girl =
+  new THREE.Group();
+
+const holder =
+  new THREE.Group();
+
+girl.add(holder);
+
+girl.visible = false;
+
+scene.add(girl);
+
+
+/* =========================================================
+   SHADOW
+========================================================= */
+
+(function createShadow(){
+
+  const c =
+    document.createElement(
+      'canvas'
+    );
+
+  c.width =
+    c.height =
+      64;
+
+  const g =
+    c.getContext('2d');
+
+
+  const gr =
+    g.createRadialGradient(
+      32,32,2,
+      32,32,30
+    );
+
+
+  gr.addColorStop(
+    0,
+    'rgba(0,0,0,.5)'
+  );
+
+  gr.addColorStop(
+    1,
+    'rgba(0,0,0,0)'
+  );
+
+
+  g.fillStyle =
+    gr;
+
+  g.fillRect(
+    0,
+    0,
+    64,
+    64
+  );
+
+
+  const texture =
+    new THREE.CanvasTexture(c);
+
+
+  const mesh =
+    new THREE.Mesh(
+
+      new THREE.PlaneGeometry(
+        GIRL_SIZE * .8,
+        GIRL_SIZE * .8
+      ).rotateX(
+        -Math.PI/2
+      ),
+
+      new THREE.MeshBasicMaterial({
+
+        map:texture,
+
+        transparent:true,
+
+        depthWrite:false
+
+      })
+
+    );
+
+
+  mesh.position.y =
+    .002;
+
+  girl.add(mesh);
+
+})();
+
+
+/* =========================================================
+   IMPACT FX
+========================================================= */
+
+const fx =
+  new THREE.Group();
+
+fx.visible = false;
+
+scene.add(fx);
+
+
+const ring =
+  new THREE.Mesh(
+
+    new THREE.RingGeometry(
+      .03,
+      .045,
+      24
+    ),
+
+    new THREE.MeshBasicMaterial({
+
+      color:0xffe14a,
+
+      transparent:true,
+
+      side:THREE.DoubleSide
+
+    })
+
+  );
+
+
+fx.add(ring);
+
+
+const sparks = [];
+
+const sg =
+  new THREE.SphereGeometry(
+    .008,
+    6,
+    6
+  );
+
+const sm =
+  new THREE.MeshBasicMaterial({
+
+    color:0xff4d6d,
+
+    transparent:true
+
+  });
+
+
+for(
+  let i=0;
+  i<10;
+  i++
+){
+
+  const m =
+    new THREE.Mesh(
+      sg,
+      sm
+    );
+
+  m.userData.v =
+    new THREE.Vector3();
+
+  sparks.push(m);
+
+  fx.add(m);
+
+}
+
+
+let fxT0 = -1e9;
+
+
+function impact(){
+
+  fx.position.copy(
+    girl.position
+  );
+
+  fx.position.y +=
+    GIRL_SIZE * .6;
+
+  fx.quaternion.copy(
+    camera.quaternion
+  );
+
+
+  sparks.forEach(
+    s => {
+
+      s.position.set(
+        0,
+        0,
+        0
+      );
+
+      s.userData.v.set(
+
+        Math.random()-.5,
+
+        Math.random()-.3,
+
+        Math.random()-.5
+
+      )
+      .normalize()
+      .multiplyScalar(
+        .12 +
+        Math.random()*.1
+      );
+
+    }
+  );
+
+
+  fxT0 =
+    performance.now();
+
+  fx.visible = true;
+
+
+  const p =
+    project(
+      GIRL_SIZE*.6
+    );
+
+
+  const pop =
+    $('pop');
+
+  pop.style.left =
+    p.x + 'px';
+
+  pop.style.top =
+    (p.y - 30) + 'px';
+
+
+  restart(
+    pop,
+    'show'
+  );
+
+
+  if(navigator.vibrate){
+
+    navigator.vibrate(60);
+
+  }
+
+}
+
+
+/* =========================================================
+   MODEL
+========================================================= */
+
+let mixer = null;
+
+let act = {};
+
+let cur = null;
+
+let hasClips = false;
+
+
+function play(
+  a,
+  once,
+  speed=1
+){
+
+  if(!a) return;
+
+  a.reset();
+
+  a.enabled = true;
+
+  a.setEffectiveTimeScale(
+    speed
+  );
+
+  a.setEffectiveWeight(1);
+
+
+  if(once){
+
+    a.setLoop(
+      THREE.LoopOnce,
+      1
+    );
+
+    a.clampWhenFinished =
+      true;
+
+  }else{
+
+    a.setLoop(
+      THREE.LoopRepeat,
+      Infinity
+    );
+
+  }
+
+
+  if(
+    cur &&
+    cur !== a
+  ){
+
+    a.crossFadeFrom(
+      cur,
+      .2,
+      false
+    );
+
+  }
+
+
+  a.play();
+
+  cur = a;
+
+}
+
+
+/* =========================================================
+   LOAD GLB
+========================================================= */
+
+function loadModel(){
+
+  return new Promise(
+    (resolve,reject)=>{
+
+      const loader =
+        new THREE.GLTFLoader();
+
+
+      loader.load(
+
+        MODEL_URL,
+
+        gltf => {
+
+          const m =
+            gltf.scene;
+
+
+          m.traverse(
+            o => {
+
+              if(o.isMesh){
+
+                o.frustumCulled =
+                  false;
+
+              }
+
+            }
+          );
+
+
+          m.updateMatrixWorld(
+            true
+          );
+
+
+          const box =
+            new THREE.Box3()
+              .setFromObject(m);
+
+
+          const size =
+            box.getSize(
+              new THREE.Vector3()
+            );
+
+
+          m.scale.multiplyScalar(
+            GIRL_SIZE /
+            (size.y || 1)
+          );
+
+
+          m.updateMatrixWorld(
+            true
+          );
+
+
+          box.setFromObject(m);
+
+
+          const center =
+            box.getCenter(
+              new THREE.Vector3()
+            );
+
+
+          m.position.set(
+
+            m.position.x -
+              center.x,
+
+            m.position.y -
+              box.min.y,
+
+            m.position.z -
+              center.z
+
+          );
+
+
+          m.rotation.y =
+            MODEL_YAW;
+
+
+          holder.add(m);
+
+
+          const clips =
+            gltf.animations || [];
+
+
+          const find =
+            regex =>
+              clips.find(
+                c =>
+                  regex.test(c.name)
+              );
+
+
+          hasClips =
+            clips.length > 0;
+
+
+          if(hasClips){
+
+            mixer =
+              new THREE.AnimationMixer(m);
+
+
+            const idle =
+              find(
+                /idle|stand/i
+              );
+
+
+            const walk =
+              find(
+                /walk/i
+              );
+
+
+            const fight =
+              find(
+                /fight|karate|martial|attack|punch|kick/i
+              )
+              ||
+              idle
+              ||
+              walk
+              ||
+              clips[0];
+
+
+            let hit =
+              find(
+                /hit|hurt|damage/i
+              );
+
+
+            let fall =
+              find(
+                /fall|knock|death|die/i
+              );
+
+
+            if(hit === fight){
+              hit = null;
+            }
+
+            if(fall === fight){
+              fall = null;
+            }
+
+
+            const mk =
+              c =>
+                c
+                  ? mixer.clipAction(c)
+                  : null;
+
+
+            act = {
+
+              fight:
+                mk(fight),
+
+              hit:
+                mk(hit),
+
+              fall:
+                mk(fall)
+
+            };
+
+          }else{
+
+            note(
+              'Model loaded, but no animations were found.'
+            );
+
+          }
+
+
+          resolve();
+
+        },
+
+        undefined,
+
+        error => {
+
+          console.error(
+            'GLB LOAD ERROR:',
+            error
+          );
+
+          reject(error);
+
+        }
+
+      );
+
+    }
+  );
+
+}
+
+
+/* =========================================================
+   GAME LOGIC
+========================================================= */
+
+let react = null;
+
+let fall = null;
+
+
+function project(y){
+
+  const v =
+    girl.position.clone();
+
+  v.y += y;
+
+  v.project(camera);
+
+
+  return {
+
+    x:
+      (v.x + 1) /
+      2 *
+      innerWidth,
+
+    y:
+      (1 - v.y) /
+      2 *
+      innerHeight
+
+  };
+
+}
+
+
+function resumeFight(){
+
+  if(
+    state !== 'HURT'
+  ){
+
+    return;
+
+  }
+
+
+  state =
+    'FIGHTING';
+
+  weak =
+    true;
+
+
+  play(
+    act.fight,
+    false,
+    .65
+  );
+
+
+  hint(
+    'One more punch! 👊'
+  );
+
+}
+
+
+function doPunch(){
+
+  const now =
+    performance.now();
+
+
+  if(
+    state !== 'FIGHTING' ||
+    now-lastHit <
+      PUNCH_COOLDOWN
+  ){
+
+    return;
+
+  }
+
+
+  lastHit =
+    now;
+
+
+  health--;
+
+  hearts();
+
+  impact();
+
+
+  /* FIRST PUNCH */
+
+  if(
+    health === 1
+  ){
+
+    state =
+      'HURT';
+
+
+    react = {
+
+      t0:now,
+
+      dur:1200,
+
+      k:1
+
+    };
+
+
+    if(act.hit){
+
+      play(
+        act.hit,
+        true
+      );
+
+    }
+
+
+    after(
+      250,
+      () => {
+
+        speak(
+          'Oh yeah!'
+        );
+
+      }
+    );
+
+
+    after(
+      1300,
+      resumeFight
+    );
+
+
+    toast(
+      'OH YEAH! 😎'
+    );
+
+  }
+
+
+  /* SECOND PUNCH */
+
+  else{
+
+    state =
+      'KO';
+
+    hint(null);
+
+
+    react = {
+
+      t0:now,
+
+      dur:450,
+
+      k:1.5
+
+    };
+
+
+    if(act.hit){
+
+      play(
+        act.hit,
+        true
+      );
+
+    }
+
+
+    after(
+      450,
+      () => {
+
+        react = null;
+
+
+        holder.rotation.set(
+          0,
+          0,
+          0
+        );
+
+
+        holder.position.set(
+          0,
+          0,
+          0
+        );
+
+
+        if(act.fall){
+
+          play(
+            act.fall,
+            true
+          );
+
+        }else{
+
+          fall = {
+
+            t0:
+              performance.now(),
+
+            dur:900
+
+          };
+
+        }
+
+
+        speak(
+          'Oh no!'
+        );
+
+
+        toast(
+          'OH NO! 😱'
+        );
+
+      }
+    );
+
+
+    after(
+      1800,
+      () =>
+        toast(
+          'GAME OVER!'
+        )
+    );
+
+
+    after(
+      2800,
+      () =>
+        $('ko')
+          .classList
+          .remove('hidden')
+    );
+
+  }
+
+}
+
+
+/* =========================================================
+   RESET
+========================================================= */
+
+function resetGame(){
+
+  timers.forEach(
+    clearTimeout
+  );
+
+  timers = [];
+
+
+  if(
+    'speechSynthesis'
+    in window
+  ){
+
+    speechSynthesis.cancel();
+
+  }
+
+
+  health = 2;
+
+  weak = false;
+
+  react = null;
+
+  fall = null;
+
+  hearts();
+
+
+  holder.rotation.set(
+    0,
+    0,
+    0
+  );
+
+
+  holder.position.set(
+    0,
+    0,
+    0
+  );
+
+
+  girl.visible = true;
+
+  fx.visible = false;
+
+
+  if(mixer){
+
+    mixer.stopAllAction();
+
+    cur = null;
+
+    play(
+      act.fight,
+      false
+    );
+
+  }
+
+
+  $('ko')
+    .classList
+    .add('hidden');
+
+
+  state =
+    'FIGHTING';
+
+
+  lastHit =
+    performance.now();
+
+
+  hist.length = 0;
+
+
+  hint(
+    handsOK
+      ? 'Punch toward her! 👊'
+      : 'Tap her to punch'
+  );
+
+}
+
+
+/* =========================================================
+   PLACE GIRL
+========================================================= */
+
+function placeGirlFromHitTest(){
+
+  if(
+    !surfaceReady ||
+    placed ||
+    !hitTestSource
+  ){
+
+    return;
+
+  }
+
+
+  girl.position.copy(
+    reticle.position
+  );
+
+
+  /*
+    Keep girl standing upright.
+    Only rotate around Y.
+  */
+
+  girl.rotation.x = 0;
+
+  girl.rotation.z = 0;
+
+
+  /*
+    Face approximately toward
+    the phone/user.
+  */
+
+  const cameraPosition =
+    new THREE.Vector3();
+
+  camera.getWorldPosition(
+    cameraPosition
+  );
+
+
+  girl.lookAt(
+    cameraPosition.x,
+    girl.position.y,
+    cameraPosition.z
+  );
+
+
+  /*
+    lookAt points the model's
+    forward direction toward camera.
+    Add 180 degrees if GLB faces backward.
+  */
+
+  girl.rotation.y +=
+    Math.PI;
+
+
+  girl.visible = true;
+
+  placed = true;
+
+  surfaceReady = false;
+
+  reticle.visible = false;
+
+  $('reticle2d')
+    .style.display =
+      'none';
+
+
+  state =
+    'FIGHTING';
+
+
+  lastHit =
+    performance.now();
+
+
+  hearts();
+
+
+  if(mixer){
+
+    play(
+      act.fight,
+      false
+    );
+
+  }
+
+
+  hint(
+    handsOK
+      ? 'Punch toward her! 👊'
+      : 'Tap her to punch'
+  );
+
+
+  speak(
+    'Come on!'
+  );
+
+}
+
+
+/* =========================================================
+   AR TAP
+========================================================= */
+
+function onScreenTap(e){
+
+  if(
+    e.target.tagName ===
+      'BUTTON'
+  ){
+
+    return;
+
+  }
+
+
+  /*
+    During AR placement,
+    a tap means:
+    place girl ONLY if a real
+    AR surface was detected.
+  */
+
+  if(
+    state === 'PLACING' &&
+    arStarted
+  ){
+
+    placeGirlFromHitTest();
+
+    return;
+
+  }
+
+
+  /*
+    Backup tap punching.
+  */
+
+  if(
+    state === 'FIGHTING' &&
+    !handsOK
+  ){
+
+    const c =
+      project(
+        GIRL_SIZE*.5
+      );
+
+
+    const t =
+      project(
+        GIRL_SIZE
+      );
+
+
+    const b =
+      project(0);
+
+
+    const r =
+      Math.abs(
+        t.y-b.y
+      )*.7 + 20;
+
+
+    if(
+      Math.hypot(
+        e.clientX-c.x,
+        e.clientY-c.y
+      ) < r
+    ){
+
+      doPunch();
+
+    }
+
+  }
+
+}
+
+
+addEventListener(
+  'pointerdown',
+  onScreenTap
+);
+
+
+/* =========================================================
+   MEDIAPIPE HAND TRACKING
+========================================================= */
+
+function onHands(res){
+
+  if(!placed){
+
+    return;
+
+  }
+
+
+  const lm =
+    res.multiHandLandmarks &&
+    res.multiHandLandmarks[0];
+
+
+  if(!lm){
+
+    hist.length = 0;
+
+    return;
+
+  }
+
+
+  let x = 0;
+
+  let y = 0;
+
+
+  [
+    0,
+    5,
+    9,
+    13,
+    17
+  ].forEach(
+    i => {
+
+      x += lm[i].x;
+
+      y += lm[i].y;
+
+    }
+  );
+
+
+  x /= 5;
+
+  y /= 5;
+
+
+  const now =
+    performance.now();
+
+
+  const vw =
+    innerWidth;
+
+  const vh =
+    innerHeight;
+
+
+  /*
+    MediaPipe gives normalized
+    coordinates.
+  */
+
+  const px =
+    x * vw;
+
+  const py =
+    y * vh;
+
+
+  const s =
+    Math.hypot(
+
+      lm[0].x -
+      lm[9].x,
+
+      lm[0].y -
+      lm[9].y
+
+    );
+
+
+  hist.push({
+
+    t:now,
+
+    x:px/vw,
+
+    y:py/vh,
+
+    s
+
+  });
+
+
+  while(
+    hist.length &&
+    now -
+      hist[0].t >
+      260
+  ){
+
+    hist.shift();
+
+  }
+
+
+  if(
+    state !== 'FIGHTING' ||
+    now-lastHit <
+      PUNCH_COOLDOWN ||
+    hist.length < 3
+  ){
+
+    return;
+
+  }
+
+
+  const old =
+    hist[0];
+
+
+  const dt =
+    (now-old.t)/1000;
+
+
+  if(dt < .06){
+
+    return;
+
+  }
+
+
+  const c =
+    project(
+      GIRL_SIZE*.5
+    );
+
+
+  const gh =
+    Math.abs(
+      project(GIRL_SIZE).y -
+      project(0).y
+    ) /
+    innerHeight;
+
+
+  const tx =
+    c.x/innerWidth -
+    px/innerWidth;
+
+
+  const ty =
+    c.y/innerHeight -
+    py/innerHeight;
+
+
+  const dist =
+    Math.hypot(
+      tx,
+      ty
+    );
+
+
+  const R =
+    gh * 1.1 +
+    .06;
+
+
+  if(dist > R){
+
+    return;
+
+  }
+
+
+  const vx =
+    (px/innerWidth-old.x) /
+    dt;
+
+
+  const vy =
+    (py/innerHeight-old.y) /
+    dt;
+
+
+  const speed =
+    Math.hypot(
+      vx,
+      vy
+    );
+
+
+  const dirOK =
+    dist < .08
+    ||
+    (
+      vx*tx +
+      vy*ty
+    )
+    /
+    (
+      (speed*dist)||1
+    )
+    > .35;
+
+
+  const ds =
+    Math.abs(
+      s-old.s
+    )
+    /
+    (old.s||1)
+    /
+    dt;
+
+
+  if(
+    (speed > 1.5 && dirOK)
+    ||
+    ds > 1.7
+  ){
+
+    hist.length = 0;
+
+    doPunch();
+
+  }
+
+}
+
+
+/* =========================================================
+   MEDIAPIPE INIT
+========================================================= */
+
+function initHands(){
+
+  try{
+
+    hands =
+      new Hands({
+
+        locateFile:
+          file =>
+            'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/'
+            +
+            file
+
+      });
+
+
+    hands.setOptions({
+
+      maxNumHands:1,
+
+      modelComplexity:0,
+
+      minDetectionConfidence:.6,
+
+      minTrackingConfidence:.5
+
+    });
+
+
+    hands.onResults(
+      onHands
+    );
+
+
+    hands.initialize()
+
+      .then(
+        () => {
+
+          handsOK = true;
+
+        }
+      )
+
+      .catch(
+        () => {
+
+          handsOK = false;
+
+          note(
+            'Hand tracking unavailable. You can tap the girl to punch.'
+          );
+
+        }
+      );
+
+
+  }catch(e){
+
+    handsOK = false;
+
+  }
+
+}
+
+
+/* =========================================================
+   WEBXR SUPPORT
+========================================================= */
+
+async function checkARSupport(){
+
+  if(
+    !navigator.xr
+  ){
+
+    return false;
+
+  }
+
+
+  try{
+
+    return await navigator.xr.isSessionSupported(
+      'immersive-ar'
+    );
+
+  }catch(e){
+
+    return false;
+
+  }
+
+}
+
+
+/* =========================================================
+   START WEBXR AR
+========================================================= */
+
+async function startAR(){
+
+  const supported =
+    await checkARSupport();
+
+
+  if(!supported){
+
+    fail(
+      'AR is not supported',
+      'Please open this project on a compatible Android phone/browser with AR support. Use HTTPS or localhost.'
+    );
+
+    return;
+
+  }
+
+
+  try{
+
+    xrSession =
+      await navigator.xr.requestSession(
+        'immersive-ar',
+        {
+
+          requiredFeatures:[
+            'hit-test'
+          ],
+
+          optionalFeatures:[
+            'dom-overlay'
+          ],
+
+          domOverlay:{
+            root:document.body
+          }
+
+        }
+      );
+
+
+    arStarted = true;
+
+
+    renderer.xr.setReferenceSpaceType(
+      'local'
+    );
+
+
+    await renderer.xr.setSession(
+      xrSession
+    );
+
+
+    localReferenceSpace =
+      await xrSession.requestReferenceSpace(
+        'local'
+      );
+
+
+    hitTestSource =
+      await xrSession.requestHitTestSource({
+
+        space:
+          await xrSession.requestReferenceSpace(
+            'viewer'
+          )
+
+      });
+
+
+    xrSession.addEventListener(
+      'end',
+      () => {
+
+        arStarted = false;
+
+        hitTestSource = null;
+
+        xrSession = null;
+
+      }
+    );
+
+
+    $('intro')
+      .classList
+      .add('hidden');
+
+
+    $('hud')
+      .classList
+      .remove('hidden');
+
+
+    hearts();
+
+
+    state =
+      'PLACING';
+
+
+    placed = false;
+
+    girl.visible = false;
+
+    reticle.visible = false;
+
+
+    hint(
+      'Move the phone slowly over a table or floor.'
+    );
+
+
+    initHands();
+
+
+    renderer.setAnimationLoop(
+      xrFrame
+    );
+
+
+  }catch(error){
+
+    console.error(
+      'WEBXR ERROR:',
+      error
+    );
+
+
+    fail(
+      'Could not start AR',
+      'Please allow camera/AR permission and make sure you are using HTTPS or localhost.'
+    );
+
+  }
+
+}
+
+
+/* =========================================================
+   XR FRAME
+========================================================= */
+
+function xrFrame(
+  time,
+  frame
+){
+
+  if(!frame){
+
+    return;
+
+  }
+
+
+  const session =
+    frame.session;
+
+
+  if(
+    !localReferenceSpace
+  ){
+
+    return;
+
+  }
+
+
+  /*
+    REAL WORLD SURFACE HIT TEST
+  */
+
+  if(
+    hitTestSource &&
+    !placed
+  ){
+
+    const hitResults =
+      frame.getHitTestResults(
+        hitTestSource
+      );
+
+
+    if(
+      hitResults.length > 0
+    ){
+
+      const hit =
+        hitResults[0];
+
+
+      const pose =
+        hit.getPose(
+          localReferenceSpace
+        );
+
+
+      if(pose){
+
+        reticle.visible = true;
+
+        reticle.matrix
+          .fromArray(
+            pose.transform.matrix
+          );
+
+        reticle.matrixAutoUpdate =
+          false;
+
+
+        /*
+          Check surface orientation.
+
+          A horizontal table/floor has
+          a normal pointing mostly upward.
+
+          This prevents vertical walls
+          from being accepted.
+        */
+
+        const normal =
+          new THREE.Vector3(
+            0,
+            1,
+            0
+          );
+
+
+        const quat =
+          new THREE.Quaternion()
+            .setFromRotationMatrix(
+              reticle.matrix
+            );
+
+
+        normal.applyQuaternion(
+          quat
+        );
+
+
+        const horizontal =
+          normal.y > 0.75;
+
+
+        if(horizontal){
+
+          surfaceReady = true;
+
+          $('reticle2d')
+            .style.display =
+              'block';
+
+          $('reticle2d')
+            .classList
+            .add('ready');
+
+
+          hint(
+            'Surface found! Tap here to place Karate Girl 🥋'
+          );
+
+        }else{
+
+          surfaceReady = false;
+
+          $('reticle2d')
+            .style.display =
+              'none';
+
+          $('reticle2d')
+            .classList
+            .remove('ready');
+
+
+          hint(
+            'This looks like a wall. Point at a table or floor.'
+          );
+
+        }
+
+      }
+
+    }else{
+
+      surfaceReady = false;
+
+      reticle.visible = false;
+
+      $('reticle2d')
+        .style.display =
+          'none';
+
+      $('reticle2d')
+        .classList
+        .remove('ready');
+
+
+      hint(
+        'Move slowly until a table or floor is detected.'
+      );
+
+    }
+
+  }
+
+
+  updateGame(
+    time
+  );
+
+
+  renderer.render(
+    scene,
+    camera
+  );
+
+
+  /*
+    MediaPipe hand tracking.
+  */
+
+  if(
+    handsOK &&
+    placed &&
+    !busy &&
+    time-lastSend > 55
+  ){
+
+    /*
+      IMPORTANT:
+      MediaPipe can use a normal video
+      stream, but WebXR camera frames
+      are not exposed as HTML video.
+
+      Therefore this version keeps
+      AR placement independent from
+      hand tracking.
+
+      Tap-to-punch always works.
+    */
+
+  }
+
+}
+
+
+/* =========================================================
+   GAME UPDATE
+========================================================= */
+
+const clock =
+  new THREE.Clock();
+
+
+function updateGame(now){
+
+  const dt =
+    Math.min(
+      clock.getDelta(),
+      .1
+    );
+
+
+  const t =
+    now / 1000;
+
+
+  if(mixer){
+
+    mixer.update(dt);
+
+  }
+
+
+  if(girl.visible){
+
+    if(react){
+
+      const p =
+        (now-react.t0) /
+        react.dur;
+
+
+      if(p >= 1){
+
+        react = null;
+
+        holder.rotation.set(
+          0,
+          0,
+          0
+        );
+
+        holder.position.set(
+          0,
+          0,
+          0
+        );
+
+      }else{
+
+        const e =
+          1-p;
+
+
+        holder.rotation.z =
+          Math.sin(
+            p*Math.PI*5
+          )
+          *.3
+          *e
+          *react.k;
+
+
+        holder.rotation.x =
+          -Math.sin(
+            p*Math.PI
+          )
+          *.25
+          *react.k;
+
+
+        holder.position.z =
+          -Math.sin(
+            p*Math.PI
+          )
+          *.07;
+
+      }
+
+    }
+
+    else if(fall){
+
+      const p =
+        Math.min(
+          1,
+          (now-fall.t0) /
+          fall.dur
+        );
+
+
+      const e =
+        1 -
+        Math.pow(
+          1-p,
+          3
+        );
+
+
+      holder.rotation.x =
+        -e *
+        Math.PI/2 *
+        .96;
+
+
+      holder.position.z =
+        -e*.08;
+
+
+      holder.position.y =
+        e*.015;
+
+    }
+
+    else if(
+      state === 'FIGHTING' ||
+      state === 'HURT'
+    ){
+
+      if(weak){
+
+        holder.rotation.x =
+          -.1 +
+          Math.sin(t*3)*.03;
+
+
+        holder.rotation.z =
+          Math.sin(t*2.2)*.06;
+
+      }
+
+
+      if(!hasClips){
+
+        holder.position.y =
+          Math.abs(
+            Math.sin(
+              t *
+              (weak ? 4 : 7)
+            )
+          )*.015;
+
+
+        /*
+          Do NOT rotate whole girl
+          around Y while placed.
+        */
+
+      }
+
+    }
+
+  }
+
+
+  /* IMPACT */
+
+  if(fx.visible){
+
+    const p =
+      (now-fxT0)/500;
+
+
+    if(p >= 1){
+
+      fx.visible = false;
+
+    }else{
+
+      ring.scale.setScalar(
+        1+p*4
+      );
+
+
+      ring.material.opacity =
+        1-p;
+
+
+      sm.opacity =
+        1-p;
+
+
+      sparks.forEach(
+        s => {
+
+          s.position
+            .copy(
+              s.userData.v
+            )
+            .multiplyScalar(p);
+
+        }
+      );
+
+    }
+
+  }
+
+}
+
+
+/* =========================================================
+   START BUTTON
+========================================================= */
+
+$('start').onclick =
+  async () => {
+
+    unlockSpeech();
+
+    /*
+      First load model.
+    */
+
+    try{
+
+      await loadModel();
+
+    }catch(e){
+
+      console.error(
+        e
+      );
+
+      fail(
+        'Karate Girl model not found',
+        'Make sure your file is exactly: models/girl.glb'
+      );
+
+      return;
+
+    }
+
+
+    /*
+      IMPORTANT:
+      Girl MUST stay hidden.
+      It will only become visible
+      after a real AR surface is found
+      and user taps it.
+    */
+
+    girl.visible = false;
+
+    placed = false;
+
+    surfaceReady = false;
+
+
+    await startAR();
+
+  };
+
+
+/* =========================================================
+   PLAY AGAIN
+========================================================= */
+
+$('again').onclick =
+  () => {
+
+    /*
+      Hide girl temporarily.
+    */
+
+    girl.visible = false;
+
+    placed = false;
+
+    surfaceReady = false;
+
+    state =
+      'PLACING';
+
+
+    health = 2;
+
+    weak = false;
+
+    react = null;
+
+    fall = null;
+
+    hearts();
+
+
+    holder.rotation.set(
+      0,
+      0,
+      0
+    );
+
+
+    holder.position.set(
+      0,
+      0,
+      0
+    );
+
+
+    $('ko')
+      .classList
+      .add('hidden');
+
+
+    hint(
+      'Move the phone to a table or floor.'
+    );
+
+  };
+
+</script>
+
+</body>
+</html>

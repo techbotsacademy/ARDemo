@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<!--
+  AI HELMET AR  -  static Web AR (Three.js r128 + MediaPipe Holistic)
+
+  IMPORTANT: Do not double-click index.html. Chrome blocks GLB loading from file://
+  Run from the helmet folder:   python -m http.server 5500
+  Open:                         http://localhost:5500
+  Alternative:                  npx serve .   ->  http://localhost:3000
+  Phone on same Wi-Fi:          http://YOUR-LAPTOP-IP:5500
+     (Android Chrome usually blocks camera on plain HTTP, except localhost.)
+  Reliable phone use:           deploy to GitHub Pages (HTTPS).
+  Large GLB (>50 MB warns, >100 MB blocked on GitHub): use Git LFS.
+  Debug panel: add ?debug=1 to the URL.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AI Helmet AR</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;800&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{--c:#27e1ff;--c2:#3b7bff;--bg:#02060f;--glass:rgba(8,20,40,.55);--ok:#4dffb4;--bad:#ff4d6d;
+  --fd:'Orbitron','Segoe UI',system-ui,sans-serif;--fb:'Rajdhani','Segoe UI',system-ui,sans-serif}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:var(--bg);color:#dff7ff;font-family:var(--fb);overflow:hidden;touch-action:manipulation}
+#app{position:fixed;inset:0;height:100dvh;width:100%;overflow:hidden}
+#video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
+#three{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+#hud{position:absolute;inset:0;pointer-events:none}
+.top{position:absolute;top:0;left:0;right:0;padding:calc(10px + env(safe-area-inset-top)) 14px 10px;display:flex;justify-content:space-between;align-items:center;
+  background:linear-gradient(#02060fcc,transparent)}
+.brand{font:800 15px var(--fd);letter-spacing:.18em;color:var(--c);text-shadow:0 0 12px var(--c)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.chip{font:700 11px var(--fb);letter-spacing:.12em;padding:3px 8px;border:1px solid #27e1ff55;border-radius:3px;background:var(--glass);color:#7fb8c8;transition:.25s}
+.chip.on{color:var(--ok);border-color:var(--ok);box-shadow:0 0 10px #4dffb455}
+.center{position:absolute;left:0;right:0;top:38%;text-align:center;transition:opacity .3s}
+.msg{font:800 clamp(18px,5vw,34px) var(--fd);letter-spacing:.2em;color:var(--c);text-shadow:0 0 18px var(--c);animation:pulse 1.8s infinite}
+.sub{font:500 13px var(--fb);letter-spacing:.3em;color:#8fd8ea;margin-top:8px}
+@keyframes pulse{50%{opacity:.45}}
+#lock{position:absolute;left:0;right:0;top:calc(52px + env(safe-area-inset-top));text-align:center;opacity:0;transition:opacity .3s}
+#lock b{font:800 14px var(--fd);letter-spacing:.25em;color:var(--ok);text-shadow:0 0 10px var(--ok)}
+#lock span{display:block;font:700 12px var(--fb);letter-spacing:.35em;color:#9fe;margin-top:4px}
+#toast{position:absolute;left:0;right:0;top:56%;text-align:center;font:800 18px var(--fd);letter-spacing:.3em;color:#fff;text-shadow:0 0 16px var(--c);opacity:0;transition:opacity .25s}
+#selector{position:absolute;left:50%;bottom:0;transform:translate(-50%,30px);width:min(560px,100%);padding:10px 10px calc(10px + env(safe-area-inset-bottom));
+  opacity:0;pointer-events:none;transition:.4s}
+#selector.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.panel{display:flex;gap:6px;justify-content:center;padding:10px 8px 6px;border:1px solid #27e1ff66;border-radius:14px;background:var(--glass);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:0 0 24px #27e1ff22,inset 0 0 18px #3b7bff1a}
+.card{flex:1;max-width:66px;min-width:0;text-align:center;cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:manipulation}
+.card .thumb{aspect-ratio:1;width:100%;border:1px solid #27e1ff44;border-radius:10px;background:radial-gradient(#0e2a4a,#06101f);display:flex;align-items:center;justify-content:center;overflow:hidden;transition:.2s}
+.card img{width:100%;height:100%;object-fit:contain;pointer-events:none}
+.card .nm{font:700 8.5px var(--fb);letter-spacing:.08em;margin-top:3px;color:#7fb8c8;white-space:nowrap;overflow:hidden}
+.card.hover .thumb{border-color:#fff;box-shadow:0 0 14px #fff8}
+.card.sel .thumb{border-color:var(--c);box-shadow:0 0 16px var(--c);transform:scale(1.12)}
+.card.sel .nm{color:var(--c)}
+.card.bad .thumb{border-color:var(--bad);opacity:.5}
+.corner{position:absolute;width:22px;height:22px;border:2px solid var(--c);opacity:.7}
+.corner.a{top:calc(48px + env(safe-area-inset-top));left:10px;border-right:0;border-bottom:0}
+.corner.b{top:calc(48px + env(safe-area-inset-top));right:10px;border-left:0;border-bottom:0}
+#dbg{position:absolute;left:8px;top:calc(70px + env(safe-area-inset-top));font:12px/1.4 monospace;background:#000a;color:#9ff;padding:6px 8px;border-radius:6px;display:none;white-space:pre}
+/* Overlay screens */
+.screen{position:absolute;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;
+  background:radial-gradient(circle at 50% 35%,#0a2a55 0,#02060f 70%)}
+.screen::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,#27e1ff0a 0 1px,transparent 1px 4px);pointer-events:none}
+.screen.hide{display:none}
+h1{font:800 clamp(28px,8vw,54px) var(--fd);letter-spacing:.14em;color:var(--c);text-shadow:0 0 24px var(--c2)}
+.tag{margin:14px 0 30px;font:700 clamp(11px,3vw,15px) var(--fb);letter-spacing:.28em;color:#9fd9ea}
+button{font:800 15px var(--fd);letter-spacing:.15em;color:#02060f;background:linear-gradient(90deg,var(--c),var(--c2));border:0;border-radius:8px;padding:15px 28px;cursor:pointer;box-shadow:0 0 26px #27e1ff88}
+button:active{transform:scale(.97)}
+.small{margin-top:14px;font:500 13px var(--fb);color:#7fb8c8;letter-spacing:.12em}
+.box{max-width:560px;border:1px solid var(--bad);border-radius:10px;padding:18px;background:#1a0610aa;text-align:left}
+.box h2{font:800 clamp(18px,5vw,26px) var(--fd);color:var(--bad);letter-spacing:.12em;margin-bottom:8px}
+.box p,.box li{font:500 16px/1.5 var(--fb);color:#e8d8dc}
+code{display:block;margin:6px 0;padding:6px 10px;background:#000a;border-radius:6px;color:#7ff;font:14px monospace}
+#bar{width:min(300px,70vw);height:4px;background:#27e1ff22;margin-top:18px;border-radius:2px;overflow:hidden}
+#bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--c),var(--c2));transition:width .2s}
+#errs{margin-top:12px;font:500 13px var(--fb);color:var(--bad);max-width:90vw}
+@media(prefers-reduced-motion:reduce){.msg{animation:none}}
+</style>
+</head>
+<body>
+<div id="app">
+  <video id="video" playsinline muted autoplay></video>
+  <canvas id="three"></canvas>
+  <div id="hud">
+    <div class="top"><div class="brand">AI HELMET AR</div>
+      <div class="chips"><span class="chip on" id="c-sys">SYSTEM READY</span><span class="chip" id="c-cam">CAMERA OFF</span><span class="chip" id="c-face">NO FACE</span></div></div>
+    <div class="corner a"></div><div class="corner b"></div>
+    <div class="center" id="step"><div class="msg">STEP INTO THE CAMERA</div><div class="sub">SEARCHING FOR HUMAN FACE</div></div>
+    <div id="lock"><b>FACE LOCKED</b><span>FACE DETECTED &bull; SWIPE TO SELECT</span></div>
+    <div id="toast"></div>
+    <div id="dbg"></div>
+    <div id="selector"><div class="panel" id="panel"></div></div>
+  </div>
+
+  <!-- START SCREEN -->
+  <div class="screen" id="start">
+    <h1>AI HELMET AR</h1>
+    <div class="tag">AI FACE TRACKING &bull; HAND GESTURE &bull; 3D AR</div>
+    <button id="startBtn">START AI HELMET AR</button>
+    <div class="small">Camera access required</div>
+  </div>
+
+  <!-- LOADING SCREEN -->
+  <div class="screen hide" id="loading">
+    <h1 style="font-size:clamp(20px,6vw,34px)">LOADING HELMET SYSTEM</h1>
+    <div class="tag" id="loadTxt">0/7</div>
+    <div id="bar"><i id="barI"></i></div>
+    <div id="errs"></div>
+  </div>
+
+  <!-- FILE:// WARNING -->
+  <div class="screen hide" id="fileWarn">
+    <div class="box">
+      <h2>LOCAL SERVER REQUIRED</h2>
+      <p><b>Do not open index.html directly.</b> Chrome blocks 3D model loading from file://.</p>
+      <p style="margin-top:10px">Run one of these commands in the helmet folder:</p>
+      <p>Option 1:</p><code>python -m http.server 5500</code><p>Then open:</p><code>http://localhost:5500</code>
+      <p>Option 2:</p><code>npx serve .</code><p>Then open:</p><code>http://localhost:3000</code>
+      <p style="margin-top:10px">For phone testing, deploy to GitHub Pages or use an HTTPS development server.</p>
+    </div>
+  </div>
+
+  <!-- ERROR SCREEN -->
+  <div class="screen hide" id="errScreen">
+    <div class="box"><h2 id="errTitle">ERROR</h2><p id="errBody"></p></div>
+    <button id="retryBtn" style="margin-top:20px">RETRY</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5.1675471629/holistic.js" crossorigin="anonymous"></script>
+<script>
+"use strict";
+/* ============================ CONFIG ============================ */
+const HOLISTIC_BASE = "https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5.1675471629/";
+// fit: size multiplier on head. rotX/Y/Z: base rotation in DEGREES (tune per model). offY: vertical shift (fraction of face width).
+const HELMETS = [
+  { file: "futuristic_helmet.glb",          name: "FUTURE",    fit: 1.0, rotX: 0, rotY: 0, rotZ: 0, offY: 0 },
+  { file: "astronaut_helmet.glb",           name: "ASTRONAUT", fit: 1.0, rotX: 0, rotY: 0, rotZ: 0, offY: 0 },
+  { file: "f1_helmet_austrian_gp_2018.glb", name: "F1",        fit: 1.0, rotX: 0, rotY: 0, rotZ: 0, offY: 0 },
+  { file: "knight_helmet.glb",              name: "KNIGHT",    fit: 1.0, rotX: 0, rotY: 0, rotZ: 0, offY: 0 },
+  { file: "helmet_full.glb",                name: "SCI-FI",    fit: 1.0, rotX: 0, rotY: 0, rotZ: 0, offY: 0 },
+  { file: "sci-fi_helmet.glb",              name: "SPACE",     fit: 1.0, rotX: 0, rotY: 0, rotZ: 0, offY: 0 },
+  { file: "iron-man_helmet_mk3.glb",        name: "IRON MAN",  fit: 1.0, rotX: 0, rotY: 0, rotZ: 0, offY: 0 }
+];
+const MODEL_DIR = "models/";          // relative path => works on localhost and GitHub Pages
+const HEAD_SCALE = 1.75;              // helmet size relative to face width (cheek to cheek)
+const VISION_INTERVAL = 40;           // ms between Holistic frames (~25 FPS)
+const SWIPE_DIST = 0.12, SWIPE_WINDOW = 700, SWIPE_COOLDOWN = 550;
+const DWELL_MS = 320, FACE_LOST_GRACE = 400;
+const DEBUG = new URLSearchParams(location.search).get("debug") === "1";
+
+/* ============================ STATE ============================ */
+const $ = id => document.getElementById(id);
+const S = {
+  running: false, camOK: false, holisticOK: false,
+  face: false, faceLostAt: 0, faceEverSeen: false,
+  left: false, right: false,
+  selected: -1, loaded: [], failed: [],
+  hist: [], lastSwipe: 0, swipeLabel: "READY",
+  dwellIdx: -1, dwellSince: 0, hoverIdx: -1,
+  lastVision: 0, stream: null, holistic: null
+};
+const video = $("video");
+
+/* ============================ AUDIO (procedural, no files) ============================ */
+let AC = null, master = null, ambGain = null, ambStarted = false;
+function initAudio() {
+  if (AC) return;
+  const Ctor = window.AudioContext || window.webkitAudioContext;
+  if (!Ctor) return;
+  AC = new Ctor();
+  master = AC.createGain(); master.gain.value = 0.35; master.connect(AC.destination);
+  if (AC.state === "suspended") AC.resume();
+}
+function tone(f, dur, type = "sine", vol = 0.2, slideTo = null, delay = 0) {
+  if (!AC) return;
+  const t = AC.currentTime + delay, o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t);
+  if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol, t + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + 0.05);
+}
+const sfx = {
+  start:  () => { tone(220, .5, "sawtooth", .08, 880); tone(440, .6, "sine", .1, 1320, .1); },
+  face:   () => { tone(660, .18, "sine", .12); tone(990, .3, "sine", .1, null, .12); },
+  swipe:  dir => { tone(dir > 0 ? 300 : 900, .22, "triangle", .12, dir > 0 ? 900 : 300); },
+  select: () => tone(1500, .16, "square", .06, 2200),
+  attach: () => { [440, 554, 659].forEach((f, i) => tone(f, .5, "sine", .1, null, i * .08)); }
+};
+function startAmbient() {
+  if (!AC || ambStarted) return;
+  ambStarted = true;
+  const lp = AC.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 400;
+  ambGain = AC.createGain(); ambGain.gain.value = 0;
+  lp.connect(ambGain); ambGain.connect(master);
+  [55, 82.5, 110.7].forEach(f => { const o = AC.createOscillator(); o.type = "sawtooth"; o.frequency.value = f; o.connect(lp); o.start(); });
+  ambGain.gain.linearRampToValueAtTime(0.035, AC.currentTime + 2);
+}
+function ambient(on) { if (ambGain) ambGain.gain.linearRampToValueAtTime(on ? 0.035 : 0, AC.currentTime + 0.8); }
+
+/* ============================ THREE.JS ============================ */
+// Orthographic camera in screen pixels: x/y positions map 1:1 to the video overlay.
+const renderer = new THREE.WebGLRenderer({ canvas: $("three"), alpha: true, antialias: true });
+renderer.setClearColor(0x000000, 0);
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+const scene = new THREE.Scene();
+const cam3 = new THREE.OrthographicCamera(-1, 1, 1, -1, -3000, 3000);
+cam3.position.z = 10;
+scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+scene.add(new THREE.HemisphereLight(0xbfe9ff, 0x223344, 0.7));
+const dl = new THREE.DirectionalLight(0xffffff, 1.2); dl.position.set(1, 2, 3); scene.add(dl);
+const headGroup = new THREE.Group();   // position / rotation / scale from face
+const baseRot = new THREE.Group();     // per-model base rotation
+headGroup.add(baseRot); headGroup.visible = false; scene.add(headGroup);
+let attached = null;
+
+function resize() {
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h, false);
+  cam3.left = -w / 2; cam3.right = w / 2; cam3.top = h / 2; cam3.bottom = -h / 2; cam3.updateProjectionMatrix();
+}
+addEventListener("resize", resize); addEventListener("orientationchange", () => setTimeout(resize, 200)); resize();
+
+/* ============================ MODEL LOADING + NORMALIZATION ============================ */
+const _box = new THREE.Box3(), _size = new THREE.Vector3(), _ctr = new THREE.Vector3();
+function normalizeModel(gltfScene) {
+  // Center the model and scale so its largest dimension is ~1 world unit.
+  _box.setFromObject(gltfScene); _box.getSize(_size); _box.getCenter(_ctr);
+  const m = Math.max(_size.x, _size.y, _size.z) || 1;
+  gltfScene.position.sub(_ctr);
+  const wrap = new THREE.Group(); wrap.add(gltfScene); wrap.scale.setScalar(1 / m);
+  const root = new THREE.Group(); root.add(wrap);
+  return root;
+}
+function loadOne(file) {
+  return new Promise((resolve, reject) => new THREE.GLTFLoader().load(MODEL_DIR + file, g => resolve(g.scene), undefined, reject));
+}
+async function loadAllHelmets() {
+  showScreen("loading");
+  let done = 0;
+  for (let i = 0; i < HELMETS.length; i++) {
+    const h = HELMETS[i];
+    try {
+      h.root = normalizeModel(await loadOne(h.file));
+      S.loaded.push(i);
+      console.log("Loaded helmet:\n" + h.file);
+    } catch (e) {
+      h.root = null; S.failed.push(h.file);
+      console.error("Failed helmet:\n" + h.file, e);
+      $("errs").innerHTML += "Helmet loading failed: " + h.file + "<br>";
+    }
+    done++;
+    $("loadTxt").textContent = done + "/" + HELMETS.length;
+    $("barI").style.width = (done / HELMETS.length * 100) + "%";
+  }
+  if (S.failed.length) await new Promise(r => setTimeout(r, 1800));
+}
+
+/* ============================ UI / SELECTOR THUMBNAILS ============================ */
+function showScreen(id) { ["start", "loading", "fileWarn", "errScreen"].forEach(s => $(s).classList.toggle("hide", s !== id)); }
+function showError(title, body, retry = true) {
+  $("errTitle").textContent = title; $("errBody").innerHTML = body;
+  $("retryBtn").style.display = retry ? "" : "none"; showScreen("errScreen");
+}
+function renderThumb(root) {
+  // Small offscreen render of a CLONE (small preview scale 0.14 of the 128px frame => compact look)
+  const r = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true });
+  r.setSize(128, 128); r.outputEncoding = THREE.sRGBEncoding;
+  const sc = new THREE.Scene(), c = new THREE.PerspectiveCamera(35, 1, 0.1, 10); c.position.set(0.6, 0.35, 2.4); c.lookAt(0, 0, 0);
+  sc.add(new THREE.AmbientLight(0xffffff, 1)); const d = new THREE.DirectionalLight(0xffffff, 1.4); d.position.set(2, 3, 4); sc.add(d);
+  const clone = root.clone(true); clone.rotation.y = -0.5; sc.add(clone);
+  r.render(sc, c); const url = r.domElement.toDataURL("image/png");
+  r.dispose(); r.forceContextLoss(); return url;
+}
+function buildSelector() {
+  const panel = $("panel"); panel.innerHTML = "";
+  HELMETS.forEach((h, i) => {
+    const card = document.createElement("div"); card.className = "card" + (h.root ? "" : " bad"); card.dataset.i = i;
+    card.innerHTML = '<div class="thumb"></div><div class="nm">' + h.name + "</div>";
+    if (h.root) { const img = new Image(); img.src = renderThumb(h.root); card.firstChild.appendChild(img); }
+    const pick = e => { e.preventDefault(); initAudio(); selectHelmet(i, "click"); };
+    card.addEventListener("click", pick);
+    card.addEventListener("pointerdown", e => { if (e.pointerType !== "touch") pick(e); });
+    card.addEventListener("touchstart", pick, { passive: false });
+    panel.appendChild(card);
+  });
+}
+function refreshCards() {
+  document.querySelectorAll(".card").forEach((c, i) => { c.classList.toggle("sel", i === S.selected); c.classList.toggle("hover", i === S.hoverIdx && i !== S.selected); });
+}
+let toastT = 0;
+function toast(t) { const el = $("toast"); el.textContent = t; el.style.opacity = 1; clearTimeout(toastT); toastT = setTimeout(() => el.style.opacity = 0, 900); }
+function setChip(id, on, txt) { const e = $(id); e.classList.toggle("on", on); if (txt) e.textContent = txt; }
+
+/* ============================ HELMET SELECTION ============================ */
+function selectHelmet(i, src) {
+  const h = HELMETS[i]; if (!h || !h.root) { toast("MODEL UNAVAILABLE"); return; }
+  if (!S.face && src !== "click") return;
+  S.selected = i;
+  // Remove old, attach a fresh clone (the GLB is never reloaded)
+  while (baseRot.children.length) baseRot.remove(baseRot.children[0]);
+  attached = h.root.clone(true); baseRot.add(attached);
+  const D = Math.PI / 180; baseRot.rotation.set(h.rotX * D, h.rotY * D, h.rotZ * D);
+  firstFit = true;
+  refreshCards(); sfx.select(); sfx.attach();
+}
+
+/* ============================ CAMERA ============================ */
+async function startCamera() {
+  const tries = [
+    { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } }, audio: false },
+    { video: { facingMode: "environment" }, audio: false },
+    { video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+    { video: true, audio: false }
+  ];
+  let lastErr;
+  for (const c of tries) {
+    try { S.stream = await navigator.mediaDevices.getUserMedia(c); break; } catch (e) { lastErr = e; console.warn("Camera constraint failed", e); }
+  }
+  if (!S.stream) throw lastErr || new Error("No camera");
+  video.srcObject = S.stream; video.style.transform = "none";   // never mirrored
+  await video.play();
+  await new Promise(r => { if (video.videoWidth) r(); else video.onloadedmetadata = r; });
+  S.camOK = true; setChip("c-cam", true, "CAMERA ACTIVE");
+}
+
+/* ============================ HOLISTIC ============================ */
+async function initHolistic() {
+  if (typeof Holistic === "undefined") throw new Error("MediaPipe Holistic script did not load (check internet / CDN).");
+  const hol = new Holistic({ locateFile: f => HOLISTIC_BASE + f });
+  hol.setOptions({ modelComplexity: 1, smoothLandmarks: true, enableSegmentation: false, smoothSegmentation: false,
+    refineFaceLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+  hol.onResults(onResults);
+  await hol.initialize();
+  S.holistic = hol; S.holisticOK = true;
+}
+async function visionLoop() {
+  while (S.running) {
+    const now = performance.now();
+    if (now - S.lastVision >= VISION_INTERVAL && video.readyState >= 2) {
+      S.lastVision = now;
+      try { await S.holistic.send({ image: video }); }
+      catch (e) { console.error(e); S.running = false; showError("AI tracking failed", "MediaPipe stopped: " + e.message); return; }
+    }
+    await new Promise(requestAnimationFrame);
+  }
+}
+
+/* ============================ COORDINATES (object-fit: cover) ============================ */
+// Maps normalized video landmark -> viewport pixels, compensating for cropping by object-fit: cover.
+const _p = { x: 0, y: 0, z: 0 };
+function landmarkToScreen(lm, out = _p) {
+  const W = innerWidth, H = innerHeight, vw = video.videoWidth || 1280, vh = video.videoHeight || 720;
+  const s = Math.max(W / vw, H / vh), dw = vw * s, dh = vh * s;
+  out.x = lm.x * dw + (W - dw) / 2; out.y = lm.y * dh + (H - dh) / 2; out.z = (lm.z || 0) * dw; return out;
+}
+function landmarkToNDC(lm, out = { x: 0, y: 0 }) {
+  const p = landmarkToScreen(lm); out.x = p.x / innerWidth * 2 - 1; out.y = -(p.y / innerHeight * 2 - 1); return out;
+}
+
+/* ============================ FACE TRACKING ============================ */
+const tPos = new THREE.Vector3(), tQuat = new THREE.Quaternion(), tEul = new THREE.Euler(0, 0, 0, "YXZ");
+let tScale = 100, firstFit = true;
+const P = { top: { x: 0, y: 0, z: 0 }, chin: { x: 0, y: 0, z: 0 }, l: { x: 0, y: 0, z: 0 }, r: { x: 0, y: 0, z: 0 } };
+function trackHead(lms) {
+  const cp = (i, o) => { const p = landmarkToScreen(lms[i]); o.x = p.x; o.y = p.y; o.z = p.z; };
+  cp(10, P.top); cp(152, P.chin); cp(234, P.l); cp(454, P.r);
+  const dx = P.r.x - P.l.x, dy = P.r.y - P.l.y, width = Math.hypot(dx, dy) || 1;
+  const hc = HELMETS[Math.max(S.selected, 0)];
+  const cx = P.top.x + (P.chin.x - P.top.x) * 0.38, cy = P.top.y + (P.chin.y - P.top.y) * 0.38 - width * (hc.offY || 0);
+  tPos.set(cx - innerWidth / 2, innerHeight / 2 - cy, 0);
+  const roll = -Math.atan2(dy, dx);
+  const yaw = Math.max(-1.2, Math.min(1.2, Math.atan2(P.r.z - P.l.z, dx)));
+  const pitch = Math.max(-0.9, Math.min(0.9, Math.atan2(P.chin.z - P.top.z, P.chin.y - P.top.y)));
+  tEul.set(pitch, yaw, roll); tQuat.setFromEuler(tEul);
+  tScale = width * HEAD_SCALE * hc.fit;
+}
+
+/* ============================ HAND TRACKING / SWIPE / FINGER ============================ */
+function handleHands(hand) {
+  if (!hand) { S.hist.length = 0; S.dwellIdx = -1; setHover(-1); return; }
+  const now = performance.now(), palm = hand[9];
+  // --- SWIPE: rolling window of palm x positions (works anywhere on screen, either hand) ---
+  S.hist.push({ x: palm.x, t: now });
+  while (S.hist.length && now - S.hist[0].t > SWIPE_WINDOW) S.hist.shift();
+  const dxs = palm.x - S.hist[0].x;
+  if (now - S.lastSwipe > SWIPE_COOLDOWN && Math.abs(dxs) > SWIPE_DIST && S.face) {
+    const dir = dxs > 0 ? 1 : -1;               // +1 = hand moved right on screen
+    S.lastSwipe = now; S.hist.length = 0;
+    const n = HELMETS.length, avail = HELMETS.map((h, i) => h.root ? i : -1).filter(i => i >= 0);
+    if (avail.length) {
+      let i = S.selected < 0 ? (dir > 0 ? n - 1 : 0) : S.selected;
+      for (let k = 0; k < n; k++) { i = (i + (dir > 0 ? -1 : 1) + n) % n; if (HELMETS[i].root) break; }
+      selectHelmet(i, "swipe");
+    }
+    toast(dir > 0 ? "SWIPE RIGHT" : "SWIPE LEFT"); sfx.swipe(dir); S.swipeLabel = "TRIGGERED";
+    return;
+  }
+  S.swipeLabel = now - S.lastSwipe <= SWIPE_COOLDOWN ? "COOLDOWN" : "READY";
+  // --- FINGER SELECTION: index fingertip (8) dwelling over a card ---
+  const tip = landmarkToScreen(hand[8]); let hit = -1;
+  if ($("selector").classList.contains("show")) {
+    const cards = document.querySelectorAll(".card");
+    for (let i = 0; i < cards.length; i++) {
+      const r = cards[i].getBoundingClientRect(), pad = 10;
+      if (tip.x > r.left - pad && tip.x < r.right + pad && tip.y > r.top - pad && tip.y < r.bottom + pad) { hit = i; break; }
+    }
+  }
+  setHover(hit);
+  if (hit < 0) { S.dwellIdx = -1; return; }
+  if (hit !== S.dwellIdx) { S.dwellIdx = hit; S.dwellSince = now; }
+  else if (now - S.dwellSince > DWELL_MS && hit !== S.selected) { selectHelmet(hit, "finger"); S.dwellSince = now + 1e9; }
+}
+function setHover(i) { if (S.hoverIdx !== i) { S.hoverIdx = i; refreshCards(); } }
+
+/* ============================ RESULTS ============================ */
+function onResults(res) {
+  const now = performance.now();
+  S.left = !!res.leftHandLandmarks; S.right = !!res.rightHandLandmarks;
+  if (res.faceLandmarks) {
+    S.faceLostAt = 0;
+    if (!S.face) faceFound();
+    trackHead(res.faceLandmarks);
+  } else if (S.face) {
+    if (!S.faceLostAt) S.faceLostAt = now;
+    if (now - S.faceLostAt > FACE_LOST_GRACE) faceLost();
+  }
+  handleHands(S.face ? (res.rightHandLandmarks || res.leftHandLandmarks) : null);
+}
+function faceFound() {
+  S.face = true; S.faceEverSeen = true;
+  $("step").style.opacity = 0; $("lock").style.opacity = 1; $("selector").classList.add("show");
+  setChip("c-face", true, "FACE DETECTED");
+  sfx.face(); startAmbient(); ambient(true);
+  setTimeout(() => { if (S.face) $("lock").style.opacity = .6; }, 2500);
+  if (S.selected >= 0) headGroup.visible = true;
+}
+function faceLost() {
+  S.face = false; S.hist.length = 0; S.dwellIdx = -1; S.hoverIdx = -1;
+  headGroup.visible = false; S.selected = -1; attached = null;
+  while (baseRot.children.length) baseRot.remove(baseRot.children[0]);
+  refreshCards(); $("selector").classList.remove("show"); $("lock").style.opacity = 0; $("step").style.opacity = 1;
+  setChip("c-face", false, "NO FACE"); ambient(false);
+}
+
+/* ============================ ANIMATION LOOP ============================ */
+function animate() {
+  requestAnimationFrame(animate);
+  if (S.face && attached) {
+    if (firstFit) { headGroup.position.copy(tPos); headGroup.quaternion.copy(tQuat); headGroup.scale.setScalar(tScale); firstFit = false; }
+    headGroup.visible = true;
+    headGroup.position.lerp(tPos, 0.3);
+    headGroup.quaternion.slerp(tQuat, 0.3);
+    headGroup.scale.setScalar(headGroup.scale.x + (tScale - headGroup.scale.x) * 0.25);
+  } else headGroup.visible = false;
+  renderer.render(scene, cam3);
+  if (DEBUG) {
+    $("dbg").textContent = "Camera: " + (S.camOK ? "OK" : "NO") + "\nHolistic: " + (S.holisticOK ? "OK" : "NO") + "\nFace: " + (S.face ? "YES" : "NO") +
+      "\nLeft hand: " + (S.left ? "YES" : "NO") + "\nRight hand: " + (S.right ? "YES" : "NO") + "\nLoaded helmets: " + S.loaded.length + "/" + HELMETS.length +
+      "\nSelected: " + (S.selected >= 0 ? HELMETS[S.selected].name : "none") + "\nSwipe: " + S.swipeLabel;
+  }
+}
+
+/* ============================ STARTUP ============================ */
+async function start() {
+  if (location.protocol === "file:") { showScreen("fileWarn"); return; }       // never attempt GLB loading from file://
+  $("startBtn").disabled = true;
+  try {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
+      throw Object.assign(new Error("Camera API unavailable. Use HTTPS or http://localhost."), { cam: true });
+    try { await startCamera(); } catch (e) { e.cam = true; throw e; }
+    initAudio(); sfx.start();
+    try { await initHolistic(); } catch (e) { e.ai = true; throw e; }
+    await loadAllHelmets();
+    if (!S.loaded.length) { showError("Helmet loading failed", "No models could be loaded:<br>" + S.failed.join("<br>") + "<br>Check the models/ folder and file names."); return; }
+    buildSelector();
+    showScreen("none");
+    S.running = true; animate(); visionLoop();
+  } catch (e) {
+    console.error(e);
+    if (e.cam) showError("Camera access failed", "Allow camera permission in the browser address bar, close other apps using the camera, and use HTTPS or localhost.<br><small>" + e.message + "</small>");
+    else if (e.ai) showError("AI tracking failed", "Could not start MediaPipe Holistic. Check your internet connection (CDN) and retry.<br><small>" + e.message + "</small>");
+    else showError("Startup error", e.message);
+  }
+}
+$("startBtn").addEventListener("click", start);
+$("retryBtn").addEventListener("click", () => location.reload());
+if (DEBUG) $("dbg").style.display = "block";
+if (location.protocol === "file:") showScreen("fileWarn");
+window.addEventListener("error", e => console.error("Uncaught:", e.message));
+</script>
+</body>
+</html>

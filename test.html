@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI WebAR Math Lab</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://docs.opencv.org/4.x/opencv.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#02050a;font-family:Arial,Helvetica,sans-serif}
+#camera{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:1;background:#000}
+#threeCanvas{position:fixed;inset:0;width:100%;height:100%;z-index:3;pointer-events:none}
+#proc{display:none}
+#startScreen{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at center,rgba(0,255,170,.1),rgba(0,0,0,.96) 65%);color:#fff}
+.startBox{width:min(90%,430px);padding:32px 25px;text-align:center;border:1px solid rgba(0,255,170,.35);border-radius:22px;background:rgba(2,10,15,.82);box-shadow:0 0 40px rgba(0,255,170,.12);backdrop-filter:blur(12px)}
+.startBox h1{margin:0 0 10px;font-size:26px}
+.startBox p{margin:8px 0;color:#a9c9c2;line-height:1.5}
+#startButton{margin-top:20px;padding:14px 30px;border:1px solid #00ffb3;border-radius:12px;background:rgba(0,255,179,.1);color:#00ffb3;font-size:16px;font-weight:bold;cursor:pointer;box-shadow:0 0 20px rgba(0,255,179,.25)}
+#status{position:fixed;top:15px;left:15px;z-index:10;padding:10px 14px;border-radius:10px;background:rgba(0,0,0,.58);border:1px solid rgba(0,255,179,.28);color:#00ffb3;font-size:13px;backdrop-filter:blur(8px)}
+#instructions{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:10;width:min(92%,520px);padding:12px 16px;text-align:center;border-radius:14px;background:rgba(0,0,0,.58);border:1px solid rgba(0,255,179,.2);color:#c7ddd8;font-size:13px;backdrop-filter:blur(8px);transition:opacity .4s}
+body.lessonOn #instructions{opacity:0}
+#muteBtn{position:fixed;top:12px;right:14px;z-index:12;padding:6px 12px;border:1px solid rgba(0,255,179,.35);border-radius:10px;background:rgba(0,0,0,.58);color:#00ffb3;font-size:18px;cursor:pointer}
+#lessonDots{position:fixed;top:62px;left:0;right:0;z-index:10;display:flex;justify-content:center;gap:6px;pointer-events:none}
+#lessonDots i{width:22px;height:5px;border-radius:3px;background:rgba(255,255,255,.22);transition:.3s}
+#lessonDots i.on{background:#ffe600}
+#lessonDots i.cur{background:#0fc;box-shadow:0 0 8px #0fc}
+.glass{border:1px solid rgba(0,255,179,.3);border-radius:18px;background:linear-gradient(145deg,rgba(255,255,255,.14),rgba(255,255,255,.04));box-shadow:0 8px 32px rgba(0,0,0,.35),0 0 24px rgba(0,255,179,.1),inset 0 1px 0 rgba(255,255,255,.22);backdrop-filter:blur(14px) saturate(140%);-webkit-backdrop-filter:blur(14px) saturate(140%);color:#fff;pointer-events:none;opacity:0;transition:.5s}
+#lessonPanel{position:fixed;right:14px;top:50%;z-index:10;width:250px;padding:14px 16px;transform:translate(20px,-50%)}
+#lessonPanel.show{opacity:1;transform:translate(0,-50%)}
+#lessonPanel h2{margin:0 0 8px;font-size:17px;color:#0fc}
+#lessonPanel ul{list-style:none;margin:0;padding:0}
+#lessonPanel li{padding:7px 0;font-size:14px;border-top:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.32);transition:.4s}
+#lessonPanel li.lit{color:#fff}
+#lessonPanel li.now{color:#ffe600;text-shadow:0 0 10px rgba(255,230,0,.7)}
+#lessonCard{position:fixed;left:50%;bottom:18px;z-index:10;width:min(92vw,560px);padding:14px 18px;transform:translate(-50%,20px);text-align:center}
+#lessonCard.show{opacity:1;transform:translate(-50%,0)}
+#lessonCard .tag{margin-bottom:4px;font-size:12px;letter-spacing:1.2px;text-transform:uppercase;color:#0fc}
+#lessonCard .big{font-size:28px;font-weight:800;line-height:1.15;text-shadow:0 0 14px rgba(0,255,204,.55)}
+#lessonCard .lines{margin-top:6px;font-size:16px;line-height:1.45;color:#dff7f0}
+#lessonCard .lines b{color:#ffe600}
+@media(max-width:760px){
+#lessonPanel{left:8px;right:8px;top:88px;width:auto;padding:8px 10px;transform:translateY(-10px)}
+#lessonPanel.show{transform:none}
+#lessonPanel h2{margin-bottom:2px;font-size:13px}
+#lessonPanel ul{display:grid;grid-template-columns:1fr 1fr;column-gap:12px}
+#lessonPanel li{padding:4px 0;font-size:11.5px}
+#lessonCard .big{font-size:22px}
+#lessonCard .lines{font-size:14px}}
+</style>
+</head>
+<body>
+<video id="camera" autoplay playsinline muted></video>
+<canvas id="threeCanvas"></canvas>
+<canvas id="proc"></canvas>
+<div id="status">Waiting for AR...</div>
+<div id="instructions">Show the CUBE marker or the PYRAMID marker. Pinch thumb + index finger to resize the hologram.</div>
+<button id="muteBtn" title="Voice on/off">🔊</button>
+<!-- <div id="lessonDots"></div>
+<div id="lessonPanel" class="glass"><h2 id="panelTitle"></h2><ul id="lessonRows"></ul></div>
+<div id="lessonCard" class="glass"><div class="tag"></div><div class="big"></div><div class="lines"></div></div> -->
+<div id="startScreen"><div class="startBox">
+<h1>⚡ AI WebAR Math Lab</h1>
+<p>Show a marker to the camera: cube marker → Cube lesson, pyramid marker → Pyramid lesson.</p>
+<p>🤏 Move thumb + index finger to make the hologram smaller or bigger.</p>
+<button id="startButton">START AR</button></div></div>
+
+<script>
+const $=id=>document.getElementById(id);
+const video=$("camera"),pc=$("proc"),stEl=$("status"),startScreen=$("startScreen"),startBtn=$("startButton");
+let arStarted=false,cvReady=false,handDetected=false,hT=.72,hC=.72,seenKey=null,lastSeen=0,lastStatus="";
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const V3=(x,y,z)=>new THREE.Vector3(x,y,z);
+const UP=V3(0,1,0);
+const FIX_X=-.3,FIX_Y=.52,SPIN=.5,GRACE=350,EXTRA=600,THR=.5;
+const SIDE_LENGTH=5,VOLUME=125,FACE_AREA=25,SURFACE=150;     // cube (cm)
+const PB=6,PFACE=Math.sqrt(3)/4*36,PVOL=25.46,PSURF=62.35;   // tetrahedron (cm): edge 6, face ≈15.59, height ≈4.90
+
+/* ALL voice text lives here */
+const LESSON_TEXT={
+ cube:{intro:"This is a cube.",vertices:"A cube has eight vertices.",edges:"A cube has twelve edges.",faces:"A cube has six square faces.",angle:"The angle between cube faces is ninety degrees.",dimension:"All sides of a cube are equal.",volume:"Volume equals side cubed.",surface:"Surface area equals six times side squared."},
+ pyramid:{intro:"This is a triangular pyramid, also called a tetrahedron.",vertices:"A triangular pyramid has four vertices.",edges:"A triangular pyramid has six edges.",faces:"A triangular pyramid has four triangular faces.",base:"The base is an equilateral triangle. Its area is root three over four times side squared.",height:"Height is the straight distance from the top to the base. Slant height runs along a triangle face.",volume:"Volume equals one third times base area times height.",surface:"Surface area equals four times the area of one triangle face."}
+};
+
+/* ---------- VOICE ---------- */
+let voiceOn=true,enVoice=null;
+const hasTTS="speechSynthesis" in window;
+function pickVoice(){if(!hasTTS)return null;const l=speechSynthesis.getVoices().filter(v=>/^en/i.test(v.lang));return l.find(v=>/en[-_]US/i.test(v.lang))||l[0]||null}
+if(hasTTS)speechSynthesis.onvoiceschanged=()=>{enVoice=pickVoice()};
+function speak(t){if(!voiceOn||!hasTTS||!t)return;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.lang="en-US";u.rate=.92;enVoice=enVoice||pickVoice();if(enVoice)u.voice=enVoice;speechSynthesis.speak(u)}
+function stopVoice(){if(hasTTS)speechSynthesis.cancel()}
+function unlockSpeech(){if(!hasTTS)return;const u=new SpeechSynthesisUtterance(" ");u.volume=0;speechSynthesis.speak(u)}
+document.addEventListener("visibilitychange",()=>{if(document.hidden)stopVoice()});
+$("muteBtn").addEventListener("click",function(){voiceOn=!voiceOn;this.textContent=voiceOn?"🔊":"🔇";if(!voiceOn)stopVoice()});
+
+/* ---------- 3D HELPERS ---------- */
+function rr(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath()}
+function makeLabel(text,o){
+ o=o||{};const w=o.w||256,h=o.h||96,c=document.createElement("canvas");c.width=w;c.height=h;
+ const x=c.getContext("2d"),tex=new THREE.CanvasTexture(c);tex.minFilter=THREE.LinearFilter;
+ const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false,depthWrite:false}));
+ sp.renderOrder=20;let cur="";
+ sp.userData.draw=function(t,fg,bg,font){
+  const k=t+"|"+fg+"|"+bg;if(k===cur)return;cur=k;x.clearRect(0,0,w,h);
+  x.fillStyle=bg;rr(x,4,4,w-8,h-8,h/2-6);x.fill();x.lineWidth=3;x.strokeStyle=fg;x.stroke();
+  x.fillStyle=fg;x.font="700 "+(font||Math.round(h*.5))+"px Arial,sans-serif";x.textAlign="center";x.textBaseline="middle";
+  x.fillText(t,w/2,h/2+2);tex.needsUpdate=true};
+ sp.userData.draw(text,o.fg||"#fff",o.bg||"rgba(2,14,20,.85)",o.font);
+ const sw=o.sw||.3;sp.scale.set(sw,sw*h/w,1);return sp}
+function cylBetween(a,b,r,mat){
+ const d=new THREE.Vector3().subVectors(b,a),m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,d.length(),8,1),mat);
+ m.position.copy(a).addScaledVector(d,.5);m.quaternion.setFromUnitVectors(UP,d.clone().normalize());return m}
+let glowTexCache=null;
+function glowTex(){
+ if(glowTexCache)return glowTexCache;
+ const c=document.createElement("canvas");c.width=c.height=128;const x=c.getContext("2d"),g=x.createRadialGradient(64,64,0,64,64,64);
+ g.addColorStop(0,"rgba(255,255,255,1)");g.addColorStop(.15,"rgba(0,255,255,.95)");g.addColorStop(.4,"rgba(0,255,180,.35)");g.addColorStop(1,"rgba(0,255,180,0)");
+ x.fillStyle=g;x.fillRect(0,0,128,128);return glowTexCache=new THREE.CanvasTexture(c)}
+function dimArrow(a,b,color){
+ const g=new THREE.Group(),mat=new THREE.MeshBasicMaterial({color:color,depthTest:false,transparent:true}),d=new THREE.Vector3().subVectors(b,a).normalize();
+ const sh=cylBetween(a.clone().addScaledVector(d,.07),b.clone().addScaledVector(d,-.07),.012,mat);
+ const c1=new THREE.Mesh(new THREE.ConeGeometry(.04,.1,12),mat);c1.position.copy(b).addScaledVector(d,-.05);c1.quaternion.setFromUnitVectors(UP,d);
+ const c2=new THREE.Mesh(new THREE.ConeGeometry(.04,.1,12),mat);c2.position.copy(a).addScaledVector(d,.05);c2.quaternion.setFromUnitVectors(UP,d.clone().negate());
+ [sh,c1,c2].forEach(m=>m.renderOrder=15);g.add(sh,c1,c2);return g}
+function dimSet(parent,a,b,color,hex,text,lp){
+ const g=new THREE.Group();g.add(dimArrow(a,b,color));
+ const l=makeLabel(text,{w:384,h:96,sw:.78,fg:hex,font:44});l.position.copy(lp);g.add(l);g.visible=false;parent.add(g);return g}
+
+/* ---------- SHAPE DEFINITIONS (vertices / edges / faces + extras + steps) ---------- */
+const FACE_COLS=[0xff5a5a,0x5aff8a,0x5a8aff,0xffc83c,0xc85aff,0x3cffee];
+let hotGlow;
+const vMat=()=>new THREE.MeshBasicMaterial({color:0xbfffee});
+let VM,VH;
+const hl=(S,i,o,c)=>{const f=S.fm[i];f.mat.color.setHex(c===undefined?f.col:c);f.mat.opacity=o};
+const setVL=(S,i,hot)=>S.vl[i].userData.draw("V"+(i+1),hot?"#ffe600":"#bfffee",hot?"rgba(70,52,0,.92)":"rgba(2,14,20,.85)");
+
+function cubeDef(){
+ const h=.5;
+ return{key:"cube",name:"Cube",marker:"assets/marker.png",sub:"A 3D shape with equal square faces",
+ V:[[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]].map(a=>V3(a[0]*h,a[1]*h,a[2]*h)),
+ E:[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]],
+ F:[[4,5,6,7],[1,2,6,5],[0,3,2,1],[0,4,7,3],[3,7,6,2],[0,1,5,4]].map((i,k)=>({i:i,c:FACE_COLS[k]})),
+ faceNote:()=>"<b>Each face is a square.</b>",
+ rows:["Vertices = 8","Edges = 12","Faces = 6","Face Angle = 90°","Length = Width = Height","Volume = Side³","Surface Area = 6 × Side²"],
+ areas:[25,25,25,25,25,25],areaTxt:(k)=>SIDE_LENGTH+"² = "+FACE_AREA+" cm²",areaLbl:()=>FACE_AREA+" cm²",
+ sForm:"Surface Area = 6 × Side²",sFinal:["6 × "+SIDE_LENGTH+"²","<b>= "+SURFACE+" cm²</b>"],
+ vForm:"Volume = Side × Side × Side",vCalc:"5 × 5 × 5",vol:VOLUME,
+ extra(S){
+  const g=S.g,X={};
+  X.ang=new THREE.Group();X.ang.visible=false;g.add(X.ang);
+  const am=new THREE.MeshBasicMaterial({color:0xff9a1a,depthTest:false,transparent:true});
+  X.fill=new THREE.MeshBasicMaterial({color:0xff9a1a,transparent:true,opacity:.4,side:THREE.DoubleSide,depthWrite:false});
+  const R=.3,pts=[];for(let i=0;i<=28;i++){const t=i/28*Math.PI/2;pts.push(V3(.5-R*Math.cos(t),.5-R*Math.sin(t),.505))}
+  const arc=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),40,.014,8,false),am);arc.renderOrder=15;X.ang.add(arc);
+  const sec=new THREE.Mesh(new THREE.CircleGeometry(R,28,Math.PI,Math.PI/2),X.fill);sec.position.set(.5,.5,.504);X.ang.add(sec);
+  const q=.1,z=.51,s1=cylBetween(V3(.5-q,.5,z),V3(.5-q,.5-q,z),.008,am),s2=cylBetween(V3(.5-q,.5-q,z),V3(.5,.5-q,z),.008,am);
+  s1.renderOrder=s2.renderOrder=15;X.ang.add(s1,s2);
+  const al=makeLabel("90°",{w:192,h:96,sw:.34,fg:"#ffb54d"});al.position.set(.2,.2,.55);X.ang.add(al);
+  X.dim=new THREE.Group();X.dim.visible=false;g.add(X.dim);
+  X.dims=[
+   dimSet(X.dim,V3(-.5,-.68,.68),V3(.5,-.68,.68),0xff5a5a,"#ff8a8a","Length = "+SIDE_LENGTH+" cm",V3(0,-.9,.9)),
+   dimSet(X.dim,V3(.68,-.68,-.5),V3(.68,-.68,.5),0x5aff8a,"#8affb0","Width = "+SIDE_LENGTH+" cm",V3(1.05,-.88,0)),
+   dimSet(X.dim,V3(-.68,-.5,.68),V3(-.68,.5,.68),0x5a9bff,"#8ab8ff","Height = "+SIDE_LENGTH+" cm",V3(-1.12,0,.8))];
+  const N=SIDE_LENGTH;
+  X.vol=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),new THREE.MeshBasicMaterial({transparent:true,opacity:.9}),N*N*N);
+  const m=new THREE.Matrix4(),col=new THREE.Color(),st=1/N,sz=st*.82;let k=0;
+  for(let y=0;y<N;y++)for(let z2=0;z2<N;z2++)for(let x=0;x<N;x++){
+   m.compose(V3(-.5+st*(x+.5),-.5+st*(y+.5),-.5+st*(z2+.5)),new THREE.Quaternion(),V3(sz,sz,sz));
+   X.vol.setMatrixAt(k,m);col.setHSL(.45+y*.07,.85,.55);X.vol.setColorAt(k,col);k++}
+  X.vol.count=0;X.vol.frustumCulled=false;X.vol.visible=false;g.add(X.vol);
+  X.volShow=p=>{X.vol.visible=true;X.vol.count=Math.floor(clamp((p-.12)/.7,0,1)*VOLUME)};
+  X.hide=()=>{X.ang.visible=false;X.dim.visible=false;X.dims.forEach(d=>d.visible=false);X.vol.visible=false};
+  return X},
+ more(S){const X=S.X;return[
+  {key:"angle",dur:4500,u(p,t){
+   hl(S,0,.18,0xff9a1a);X.ang.visible=true;X.fill.opacity=.32+.14*Math.sin(t*5);
+   S.vg.visible=true;S.vl.forEach(l=>l.visible=false);S.vs[6].material=VH;S.vs[6].scale.setScalar(2);
+   return["Angle","Face Angle = 90°",["Faces meet at a right angle (a square corner)"]]}},
+  {key:"dimension",dur:4500,u(p,t){
+   X.dim.visible=true;X.dims[0].visible=p>.05;X.dims[1].visible=p>.25;X.dims[2].visible=p>.45;
+   const L=[];if(p>.05)L.push("Length = "+SIDE_LENGTH+" cm");if(p>.25)L.push("Width = "+SIDE_LENGTH+" cm");if(p>.45)L.push("Height = "+SIDE_LENGTH+" cm");
+   return["Dimensions",p>.7?"Length = Width = Height":"Dimensions",L]}}]}}}
+
+function pyramidDef(){
+ // Regular tetrahedron, every edge = 6 cm (1 unit). Height = a*sqrt(2/3), base circumradius = a/sqrt(3)
+ const R=0.9,H=Math.sqrt(2/3),y0=-H/4,y1=3*H/4;
+ const B=[V3(0,y0,R),V3(-.5,y0,-R/2),V3(.5,y0,-R/2)],AP=V3(0,y1,0);
+ return{key:"pyramid",name:"Triangular Pyramid",marker:"assets/marker_pyramid.png",sub:"A 3D shape with four equal triangle faces (tetrahedron)",
+ V:[B[0],B[1],B[2],AP],
+ E:[[0,1],[1,2],[2,0],[0,3],[1,3],[2,3]],
+ F:[{i:[0,1,2],c:0xffe600},{i:[0,1,3],c:0xff3b3b},{i:[1,2,3],c:0x3b7bff},{i:[2,0,3],c:0x3bff8a}],
+ faceNote:()=>"<b>Every face is a triangle.</b>",
+ rows:["Vertices = 4","Edges = 6","Faces = 4 (all triangles)","Edge = 6 cm · Base area ≈ 15.59 cm²","Height ≈ 4.90 · Slant ≈ 5.20 cm","Volume = ⅓ × Base area × Height","Surface Area = 4 × Face area"],
+ areas:[PFACE,PFACE,PFACE,PFACE],areaTxt:()=>"¼√3 × 6² ≈ 15.59 cm²",areaLbl:()=>"15.59 cm²",
+ sForm:"Surface Area = 4 × Face area",sFinal:["4 × (¼√3 × 6²)","<b>= √3 × 6² ≈ "+PSURF+" cm²</b>"],
+ vForm:"Volume = ⅓ × Base area × Height",vCalc:"⅓ × 15.59 × 4.90",vol:PVOL,
+ extra(S){
+  const g=S.g,X={};
+  X.grp=new THREE.Group();X.grp.visible=false;g.add(X.grp);
+  // base edge arrow (V0-V1), pushed outward
+  const mid=B[0].clone().add(B[1]).multiplyScalar(.5),out=V3(mid.x,0,mid.z).normalize();
+  const o1=out.clone().multiplyScalar(.14);
+  X.base=dimSet(X.grp,B[0].clone().add(o1),B[1].clone().add(o1),0xff5a5a,"#ff8a8a","Edge = 6 cm",mid.clone().add(out.clone().multiplyScalar(.6)).add(V3(0,-.12,0)));
+  // height arrow: base centre -> apex
+  X.h=dimSet(X.grp,V3(0,y0,0),V3(0,y1,0),0x5a9bff,"#8ab8ff","Height ≈ 4.9 cm",V3(.5,.1,0));
+  // slant (face altitude): midpoint of base edge -> apex
+  const sa=mid.clone(),sm=sa.clone().add(AP).multiplyScalar(.5);
+  X.s=dimSet(X.grp,sa,AP,0xff9a1a,"#ffb54d","Slant ≈ 5.2 cm",sm.clone().add(out.clone().multiplyScalar(.7)));
+  // volume: stacked triangular slabs that shrink toward the apex
+  X.vol=new THREE.Group();X.vol.visible=false;g.add(X.vol);X.slabs=[];
+  const hh=H/6;
+  for(let i=0;i<6;i++){const r=R*(1-(i+.5)/6),m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,hh*.9,3),new THREE.MeshBasicMaterial({color:new THREE.Color().setHSL(.45+i*.08,.85,.55),transparent:true,opacity:.85}));
+   m.position.set(0,y0+hh*(i+.5),0);X.vol.add(m);X.slabs.push(m)}
+  X.volShow=p=>{X.vol.visible=true;const n=Math.floor(clamp((p-.12)/.7,0,1)*6);X.slabs.forEach((m,i)=>m.visible=i<n)};
+  X.hide=()=>{X.grp.visible=false;X.base.visible=X.h.visible=X.s.visible=false;X.vol.visible=false};
+  return X},
+ more(S){const X=S.X;return[
+  {key:"base",dur:4500,u(p,t){
+   hl(S,0,.45+.1*Math.sin(t*6));X.grp.visible=true;X.base.visible=true;
+   const L=["The base is an equilateral triangle"];if(p>.5)L.push("Base area = ¼√3 × 6² ≈ <b>15.59 cm²</b>");
+   return["Base","Edge = "+PB+" cm",L]}},
+  {key:"height",dur:6000,u(p,t){
+   X.grp.visible=true;X.h.visible=p>.05;X.s.visible=p>.35;S.vg.visible=true;S.vl.forEach(l=>l.visible=false);
+   S.vs[3].material=VH;S.vs[3].scale.setScalar(2);
+   const L=["Height ≈ 4.90 cm (apex straight down to base)"];if(p>.35)L.push("Slant height ≈ 5.20 cm (along a triangle)");
+   if(p>.7)L.push("<b>4.9² + 1.7² ≈ 5.2²</b> (Pythagoras)");
+   return["Height & Slant","Height ≈ 4.90 cm",L]}}]}}}
+
+function buildShape(d){
+ const S=d;S.g=new THREE.Group();S.g.visible=false;
+ const ne=new THREE.MeshBasicMaterial({color:0x00ffcc,transparent:true,opacity:.95,blending:THREE.AdditiveBlending});
+ const ng=new THREE.MeshBasicMaterial({color:0x00ffff,transparent:true,opacity:.1,blending:THREE.AdditiveBlending});
+ d.E.forEach(e=>{S.g.add(cylBetween(d.V[e[0]],d.V[e[1]],.018,ne));S.g.add(cylBetween(d.V[e[0]],d.V[e[1]],.035,ng))});
+ S.glows=d.V.map((v,i)=>{const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex(),color:i%2?0x00ff99:0x00ffff,transparent:true,opacity:.9,blending:THREE.AdditiveBlending,depthWrite:false}));sp.position.copy(v);sp.scale.set(.23,.23,.23);S.g.add(sp);return sp});
+ S.fm=d.F.map(f=>{
+  const v=f.i.map(j=>d.V[j]),pos=[],geo=new THREE.BufferGeometry();
+  for(let k=1;k<v.length-1;k++)[v[0],v[k],v[k+1]].forEach(p=>pos.push(p.x,p.y,p.z));
+  geo.setAttribute("position",new THREE.Float32BufferAttribute(pos,3));
+  const mat=new THREE.MeshBasicMaterial({color:0x00ffcc,transparent:true,opacity:.07,side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending});
+  S.g.add(new THREE.Mesh(geo,mat));
+  const c=v.reduce((a,p)=>a.add(p.clone()),V3(0,0,0)).multiplyScalar(1/v.length);
+  return{mat:mat,col:f.c,out:c.clone().add(c.clone().normalize().multiplyScalar(.14))}});
+ S.vg=new THREE.Group();S.g.add(S.vg);S.vs=[];S.vl=[];
+ const sg=new THREE.SphereGeometry(.035,16,12);
+ d.V.forEach((v,i)=>{
+  const s=new THREE.Mesh(sg,VM);s.position.copy(v);S.vg.add(s);S.vs.push(s);
+  const l=makeLabel("V"+(i+1),{w:128,h:64,sw:.26});l.position.copy(v).add(v.clone().normalize().multiplyScalar(.17));S.vg.add(l);S.vl.push(l)});
+ S.hot=new THREE.Group();S.g.add(S.hot);
+ const hm=new THREE.MeshBasicMaterial({color:0xffe600});
+ d.E.forEach(e=>{S.hot.add(cylBetween(d.V[e[0]],d.V[e[1]],.028,hm));S.hot.add(cylBetween(d.V[e[0]],d.V[e[1]],.07,hotGlow))});
+ S.fl=makeLabel("Face 1",{w:256,h:96,sw:.5});S.fl.visible=false;S.g.add(S.fl);
+ S.X=d.extra(S);
+ S.reset=function(){
+  S.vg.visible=false;
+  S.vs.forEach((s,i)=>{s.visible=true;s.scale.setScalar(1);s.material=VM;S.vl[i].visible=true;setVL(S,i,false)});
+  S.hot.visible=false;S.fm.forEach(f=>{f.mat.color.setHex(0x00ffcc);f.mat.opacity=.07});S.fl.visible=false;S.X.hide()};
+ const nF=d.F.length;
+ S.steps=[
+  {key:"intro",dur:3500,u:()=>["Introduction","This is a "+S.name,[S.sub]]},
+  {key:"vertices",dur:6000,u(p){
+   const n=S.V.length,k=Math.min(n-1,Math.floor(p/.9*n));S.vg.visible=true;
+   for(let i=0;i<n;i++){const show=i<=k;S.vs[i].visible=show;S.vl[i].visible=show;
+    if(i===k&&p<.92){S.vs[i].material=VH;S.vs[i].scale.setScalar(2+.4*Math.sin(p*40));setVL(S,i,true)}}
+   return["Vertices","Vertices = "+(k+1),["A vertex is a corner where edges meet","Now counting: <b>V"+(k+1)+"</b>"]]}},
+  {key:"edges",dur:4000,u(p,t){
+   S.vg.visible=true;S.vl.forEach(l=>l.visible=false);S.hot.visible=true;hotGlow.opacity=.3+.15*Math.sin(t*6);
+   return["Edges","Edges = "+S.E.length,["An edge is a line where two faces meet"]]}},
+  {key:"faces",dur:6000,u(p,t){
+   const k=Math.min(nF-1,Math.floor(p/.95*nF));
+   for(let i=0;i<k;i++)hl(S,i,.14);hl(S,k,.5+.12*Math.sin(t*8));
+   S.fl.visible=true;S.fl.position.copy(S.fm[k].out);S.fl.userData.draw("Face "+(k+1),"#fff","rgba(2,14,20,.85)");
+   return["Faces","Face "+(k+1),[S.faceNote(k),"Faces counted: "+(k+1)+" / "+nF]]}}
+ ].concat(d.more(S),[
+  {key:"volume",dur:5500,u(p){
+   S.X.volShow(p);const L=[S.vForm];if(p>.3)L.push(S.vCalc);if(p>.6)L.push("<b>= "+S.vol+" cm³</b>");
+   return["Volume","Volume",L]}},
+  {key:"surface",dur:6500,u(p,t){
+   const n=S.areas.length,L=[S.sForm];
+   if(p>.1&&p<.82){
+    const k=Math.min(n-1,Math.floor((p-.1)/(.72/n)));let tot=0;
+    for(let i=0;i<=k;i++)tot+=S.areas[i];
+    for(let i=0;i<k;i++)hl(S,i,.2);hl(S,k,.55+.1*Math.sin(t*8));
+    S.fl.visible=true;S.fl.position.copy(S.fm[k].out);S.fl.userData.draw(S.areaLbl(k),"#fff","rgba(2,14,20,.85)");
+    L.push("Face "+(k+1)+": "+S.areaTxt(k)+" · Total = "+(+tot.toFixed(2))+" cm²");
+   }else if(p>=.82){S.fm.forEach((f,i)=>hl(S,i,.22));S.sFinal.forEach(x=>L.push(x))}
+   return["Surface Area","Surface Area",L]}}
+ ]);
+ return S}
+
+/* ---------- THREE ---------- */
+const SHAPES={};
+let scene,renderer,cam,root,spinY=FIX_Y,partPts;
+function initThree(){
+ scene=new THREE.Scene();
+ renderer=new THREE.WebGLRenderer({canvas:$("threeCanvas"),alpha:true,antialias:true});
+ renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);
+ cam=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,.01,100);cam.position.set(0,0,7);
+ VM=vMat();VH=new THREE.MeshBasicMaterial({color:0xffe600});
+ hotGlow=new THREE.MeshBasicMaterial({color:0xffd400,transparent:true,opacity:.35,blending:THREE.AdditiveBlending,depthWrite:false});
+ root=new THREE.Group();root.visible=false;scene.add(root);
+ [cubeDef(),pyramidDef()].forEach(d=>{const S=buildShape(d);SHAPES[S.key]=S;root.add(S.g)});
+ const N=60,pos=new Float32Array(N*3);
+ for(let i=0;i<N;i++){const r=.9+Math.random()*.7,a=Math.random()*6.283;pos[i*3]=Math.cos(a)*r;pos[i*3+1]=(Math.random()-.5)*1.8;pos[i*3+2]=Math.sin(a)*r}
+ const pg=new THREE.BufferGeometry();pg.setAttribute("position",new THREE.BufferAttribute(pos,3));
+ partPts=new THREE.Points(pg,new THREE.PointsMaterial({size:.035,color:0x00ffcc,transparent:true,opacity:.8,blending:THREE.AdditiveBlending,depthWrite:false}));
+ root.add(partPts);
+ addEventListener("resize",()=>{renderer.setSize(innerWidth,innerHeight);cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix()});
+ animate()}
+
+/* ---------- HUD + LESSON STATE ---------- */
+const panel=$("lessonPanel"),card=$("lessonCard"),dotsEl=$("lessonDots");
+let hudSig="",rowEls=[],dotEls=[],cur=null,shownKey=null,lostSince=0,lastNow=0;
+function renderHud(tag,big,lines){
+ const sig=tag+big+lines.join("|");if(sig===hudSig)return;hudSig=sig;
+ card.querySelector(".tag").textContent=tag;card.querySelector(".big").innerHTML=big;
+ card.querySelector(".lines").innerHTML=lines.map(l=>"<div>"+l+"</div>").join("")}
+function startLesson(key){
+ const S=SHAPES[key];cur={S:S,i:0,t0:0,done:false};hudSig="";
+ Object.values(SHAPES).forEach(s=>s.g.visible=false);S.g.visible=true;
+ $("panelTitle").textContent=S.name+" Mathematics";
+ $("lessonRows").innerHTML=S.rows.map(r=>"<li>"+r+"</li>").join("");rowEls=[...document.querySelectorAll("#lessonRows li")];
+ dotsEl.innerHTML=S.steps.map(()=>"<i></i>").join("");dotEls=[...dotsEl.children];
+ document.body.classList.add("lessonOn");panel.classList.add("show");card.classList.add("show");goStep(0)}
+function goStep(i){
+ cur.i=i;cur.t0=performance.now();hudSig="";speak(LESSON_TEXT[cur.S.key][cur.S.steps[i].key]);
+ dotEls.forEach((d,j)=>{d.classList.toggle("on",j<i);d.classList.toggle("cur",j===i)});
+ rowEls.forEach(r=>r.classList.remove("now"));if(i>0&&rowEls[i-1])rowEls[i-1].classList.add("lit","now")}
+function finishLesson(){
+ cur.done=true;hudSig="";dotEls.forEach(d=>{d.classList.add("on");d.classList.remove("cur")});
+ rowEls.forEach(r=>{r.classList.remove("now");r.classList.add("lit")});
+ const S=cur.S,sum=S.key==="cube"?["8 vertices · 12 edges · 6 square faces","Volume = "+VOLUME+" cm³ · Surface Area = "+SURFACE+" cm²"]:["4 vertices · 6 edges · 4 triangular faces","Volume ≈ "+PVOL+" cm³ · Surface Area ≈ "+PSURF+" cm²"];
+ sum.push("<span style='font-size:12px;opacity:.75'>Hide the marker and show it again to replay</span>");
+ renderHud("Lesson complete ✓",S.name+" Mathematics",sum)}
+function resetLesson(){
+ stopVoice();Object.values(SHAPES).forEach(s=>{s.reset();s.g.visible=false});cur=null;hudSig="";
+ document.body.classList.remove("lessonOn");panel.classList.remove("show");card.classList.remove("show");
+ rowEls.forEach(r=>r.classList.remove("lit","now"));dotEls.forEach(d=>d.classList.remove("on","cur"))}
+function updateLesson(now,t){
+ if(!cur)return;cur.S.reset();if(cur.done)return;
+ const S=cur.S,st=S.steps[cur.i],p=Math.min(1,(now-cur.t0)/st.dur),r=st.u(p,t);
+ renderHud("Step "+(cur.i+1)+" / "+S.steps.length+" · "+r[0],r[1],r[2]);
+ if(now-cur.t0>=st.dur){cur.i<S.steps.length-1?goStep(cur.i+1):finishLesson()}}
+function setStatus(s){if(s!==lastStatus){lastStatus=s;stEl.textContent=s}}
+
+function lessonFrame(t){
+ const now=performance.now(),dt=Math.min(.1,(now-lastNow)/1000||.016);lastNow=now;
+ const vis=seenKey&&now-lastSeen<GRACE;
+ if(vis){
+  lostSince=0;root.visible=true;
+  if(shownKey!==seenKey){if(shownKey)resetLesson();shownKey=seenKey;spinY=FIX_Y;startLesson(shownKey)}
+  setStatus("✓ "+SHAPES[shownKey].name+" marker detected");
+ }else if(shownKey){
+  if(!lostSince)lostSince=now;
+  if(now-lostSince>EXTRA){resetLesson();shownKey=null;seenKey=null;lostSince=0;root.visible=false;setStatus("Searching for marker...")}
+  else if(cur)cur.t0+=dt*1000;
+  return}
+ else{root.visible=false;return}
+ spinY+=SPIN*dt;const S=SHAPES[shownKey];S.g.rotation.set(FIX_X,spinY,0);
+ updateLesson(now,t)}
+
+function animate(){
+ requestAnimationFrame(animate);
+ hC+=(hT-hC)*.1;root.scale.set(hC,hC,hC);
+ const t=performance.now()*.001;
+ Object.values(SHAPES).forEach(S=>{if(S.g.visible)S.glows.forEach((g,i)=>g.material.opacity=.72+.2+Math.sin(t*3+i*.7)*.07)});
+ partPts.rotation.y=t*.12;partPts.rotation.x=Math.sin(t*.25)*.08;
+ lessonFrame(t);renderer.render(scene,cam)}
+
+/* ---------- CAMERA ---------- */
+async function startCamera(){
+ setStatus("Starting camera...");
+ try{
+  try{cameraStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"},width:{ideal:1280},height:{ideal:720}},audio:false})}
+  catch(e){cameraStream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280},height:{ideal:720}},audio:false})}
+  video.srcObject=cameraStream;await video.play();arStarted=true;startScreen.style.display="none";
+  setStatus("Camera ready — show marker");startMarkerDetection();startHandTracking();
+ }catch(e){console.error(e);setStatus("Camera permission required")}}
+let cameraStream=null;
+
+/* ---------- MARKER DETECTION (OpenCV multi-scale template match, 2 markers) ---------- */
+const SCALES=[.25,.35,.5,.7,1,1.4];
+function loadMarkers(){
+ Object.values(SHAPES).forEach(S=>{
+  const im=new Image();
+  im.onload=()=>{try{
+   const sc=Math.min(1,200/Math.max(im.width,im.height)),c=document.createElement("canvas");
+   c.width=Math.round(im.width*sc);c.height=Math.round(im.height*sc);c.getContext("2d").drawImage(im,0,0,c.width,c.height);
+   const m=cv.imread(c),g=new cv.Mat();cv.cvtColor(m,g,cv.COLOR_RGBA2GRAY);m.delete();S.tpl=g;cvReady=true;
+   console.log("Marker loaded:",S.key)}catch(e){console.error("OpenCV marker error:",e)}};
+  im.onerror=()=>{console.warn("Marker not found:",S.marker);setStatus("Marker image not found: "+S.marker)};
+  im.src=S.marker})}
+function detectMarker(){
+ if(!arStarted||!cvReady||video.readyState<2||!video.videoWidth)return;
+ const W=480,H=Math.round(W*video.videoHeight/video.videoWidth);pc.width=W;pc.height=H;
+ pc.getContext("2d",{willReadFrequently:true}).drawImage(video,0,0,W,H);
+ let frame;try{frame=cv.imread(pc)}catch(e){return}
+ const gray=new cv.Mat();cv.cvtColor(frame,gray,cv.COLOR_RGBA2GRAY);frame.delete();
+ let best={s:-1};
+ for(const key in SHAPES){const T=SHAPES[key].tpl;if(!T)continue;
+  for(const sc of SCALES){
+   const w=Math.round(T.cols*sc),h=Math.round(T.rows*sc);if(w<24||h<24||w>=W||h>=H)continue;
+   const r=new cv.Mat(),res=new cv.Mat();
+   try{cv.resize(T,r,new cv.Size(w,h),0,0,cv.INTER_AREA);cv.matchTemplate(gray,r,res,cv.TM_CCOEFF_NORMED);
+    const mm=cv.minMaxLoc(res);if(mm.maxVal>best.s)best={s:mm.maxVal,key:key,x:mm.maxLoc.x,y:mm.maxLoc.y,w:w,h:h}}catch(e){}
+   r.delete();res.delete()}}
+ gray.delete();
+ if(best.s>=THR){seenKey=best.key;lastSeen=performance.now();placeShape(best,W,H)}}
+function placeShape(b,W,H){
+ const sx=(b.x+b.w/2)/W,sy=(b.y+b.h/2)/H,mh=b.h/H;
+ const cx=(sx-.5)*2,cy=(.5-sy)*2+mh*.6;
+ root.position.set(cx*2.7,cy*2.1,0);
+ if(!handDetected)hT=clamp(mh/.32,.55,1.1)*.72}
+function startMarkerDetection(){loadMarkers();(function loop(){if(arStarted)detectMarker();setTimeout(loop,110)})()}
+
+/* ---------- MEDIAPIPE HANDS (pinch to scale) ---------- */
+let hands=null,handCamera=null;
+function startHandTracking(){
+ hands=new Hands({locateFile:f=>"https://cdn.jsdelivr.net/npm/@mediapipe/hands/"+f});
+ hands.setOptions({maxNumHands:1,modelComplexity:0,minDetectionConfidence:.45,minTrackingConfidence:.45});
+ hands.onResults(onHandResults);
+ handCamera=new Camera(video,{onFrame:async()=>{if(arStarted&&video.readyState>=2&&video.videoWidth>0)await hands.send({image:video})},width:640,height:480});
+ handCamera.start()}
+function onHandResults(r){
+ if(!r.multiHandLandmarks||!r.multiHandLandmarks.length){handDetected=false;return}
+ const L=r.multiHandLandmarks[0],a=L[4],b=L[8];
+ const d=Math.hypot(a.x-b.x,a.y-b.y,(a.z||0)-(b.z||0));
+ const n=clamp((d-.025)/(.30-.025),0,1);
+ hT=.35+n*(1.25-.35);handDetected=true}
+
+/* ---------- START ---------- */
+startBtn.addEventListener("click",async()=>{
+ if(arStarted)return;startBtn.disabled=true;startBtn.textContent="STARTING...";unlockSpeech();await startCamera()});
+initThree();
+</script>
+</body>
+</html>

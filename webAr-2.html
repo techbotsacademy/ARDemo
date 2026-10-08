@@ -1,0 +1,2814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🎭 AR Dancing Girl on My Hand</title>
+
+  <style>
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #05050a;
+      font-family: "Segoe UI", Arial, sans-serif;
+    }
+
+    #camera-feed {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: 1;
+      transform: scaleX(-1);
+    }
+
+    #three-canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    #start-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+
+      text-align: center;
+
+      background:
+        radial-gradient(
+          circle at 50% 40%,
+          #2b1a3d 0%,
+          #0a0714 70%
+        );
+
+      color: #fff;
+      transition: opacity 0.7s ease;
+    }
+
+    #start-screen h1 {
+      font-size: clamp(2rem, 6vw, 3.2rem);
+      margin: 0 0 10px 0;
+
+      background:
+        linear-gradient(
+          90deg,
+          #ffd166,
+          #ff8fab,
+          #9be8ff
+        );
+
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+
+      text-shadow:
+        0 0 40px rgba(255, 143, 171, 0.35);
+    }
+
+    #start-screen p {
+      font-size: clamp(0.95rem, 2.2vw, 1.2rem);
+      color: #d8cdf0;
+      margin: 0 0 34px 0;
+    }
+
+    #start-btn {
+      padding: 16px 40px;
+
+      font-size: 1.05rem;
+      font-weight: 600;
+
+      color: #1a1130;
+
+      background:
+        linear-gradient(
+          135deg,
+          #ffe1a8,
+          #ff9ecf 55%,
+          #9be8ff
+        );
+
+      border: none;
+      border-radius: 999px;
+
+      cursor: pointer;
+
+      box-shadow:
+        0 8px 30px rgba(255, 158, 207, 0.45);
+
+      transition:
+        transform 0.25s ease,
+        box-shadow 0.25s ease;
+    }
+
+    #start-btn:hover {
+      transform: translateY(-2px) scale(1.03);
+    }
+
+    #start-screen.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #status-label {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+
+      z-index: 5;
+
+      color: rgba(255, 255, 255, 0.92);
+
+      font-size: 0.95rem;
+      letter-spacing: 0.3px;
+
+      background: rgba(20, 10, 35, 0.45);
+
+      padding: 8px 18px;
+      border-radius: 999px;
+
+      backdrop-filter: blur(5px);
+
+      text-shadow:
+        0 0 10px rgba(0, 0, 0, 0.5);
+
+      opacity: 0;
+      transition: opacity 0.4s ease;
+
+      pointer-events: none;
+    }
+
+    #status-label.visible {
+      opacity: 1;
+    }
+
+    #error-message {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+
+      z-index: 20;
+
+      background: rgba(120, 20, 20, 0.88);
+      color: #fff;
+
+      padding: 12px 20px;
+
+      border-radius: 10px;
+
+      font-size: 0.9rem;
+
+      max-width: 80%;
+
+      text-align: center;
+
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+
+  <video
+    id="camera-feed"
+    autoplay
+    playsinline
+    muted
+  ></video>
+
+  <canvas id="three-canvas"></canvas>
+
+  <div id="status-label">
+    ✋ Show your hand
+  </div>
+
+  <div id="error-message"></div>
+
+  <div id="start-screen">
+
+    <h1>🎭 AR MAGIC GIRL</h1>
+
+    <p>
+      Put something in your hand and meet your tiny dancing friend!
+    </p>
+
+    <button id="start-btn">
+      START MAGIC
+    </button>
+
+  </div>
+
+
+  <!-- THREE.JS -->
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+
+
+  <!-- MEDIAPIPE -->
+
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+
+
+  <script>
+
+    /* =========================================================
+       ELEMENTS
+       ========================================================= */
+
+    const startScreen =
+      document.getElementById("start-screen");
+
+    const startBtn =
+      document.getElementById("start-btn");
+
+    const videoEl =
+      document.getElementById("camera-feed");
+
+    const statusLabel =
+      document.getElementById("status-label");
+
+    const errorBox =
+      document.getElementById("error-message");
+
+
+    /* =========================================================
+       GLOBAL STATE
+       ========================================================= */
+
+    let sceneReady = false;
+
+    let handTrackingActive = false;
+
+    let hands = null;
+
+    let scene = null;
+    let camera = null;
+    let renderer = null;
+    let clock = null;
+
+    let character = null;
+    let visualGroup = null;
+
+    let girlModel = null;
+
+    let mixer = null;
+    let danceAction = null;
+
+    let particleSys = null;
+    let shadowDisc = null;
+
+    let primaryVisible = false;
+    let secondaryVisible = false;
+
+    let primaryLM = null;
+    let secondaryLM = null;
+
+    let primaryMissed = 0;
+    let secondaryMissed = 0;
+
+    const MISS_LIMIT = 12;
+
+    const SMOOTH = 0.4;
+
+
+    /* =========================================================
+       AR POSITION
+       ========================================================= */
+
+    const rawAnchor =
+      new THREE.Vector3(0, -1.5, -3);
+
+    let rawScaleFactor = 0.28;
+
+    let rawTiltZ = 0;
+    let rawTiltX = 0;
+
+    let smoothTilt = 0;
+    let smoothTiltX = 0;
+
+
+    /* =========================================================
+       FINGERTIP
+       ========================================================= */
+
+    const fingertipWorld =
+      new THREE.Vector3();
+
+    let fingertipActive = false;
+
+
+    /* =========================================================
+       PHYSICS
+       ========================================================= */
+
+    const physOffset =
+      new THREE.Vector3();
+
+    const physVelocity =
+      new THREE.Vector3();
+
+    let physRotVelocityZ = 0;
+    let physRotOffsetZ = 0;
+
+    let squash = 1;
+    let squashVelocity = 0;
+
+    let expressionTimer = 0;
+
+    const SPRING_K = 60;
+    const DAMPING = 8;
+
+    const TOUCH_DISTANCE = 0.40;
+
+    let lastTouchCooldown = 0;
+
+
+    /* =========================================================
+       DANCE
+       ========================================================= */
+
+    let danceTime = 0;
+
+
+    /* =========================================================
+       AUDIO
+       ========================================================= */
+
+    let audioCtx = null;
+
+
+    /* =========================================================
+       START
+       ========================================================= */
+
+    startBtn.addEventListener(
+      "click",
+      startCamera
+    );
+
+
+    async function startCamera() {
+
+      if (location.protocol === "file:") {
+
+        showError(
+          "Please run this project using a local server. Example: python -m http.server 8000"
+        );
+
+        return;
+      }
+
+
+      if (
+        !navigator.mediaDevices ||
+        !navigator.mediaDevices.getUserMedia
+      ) {
+
+        showError(
+          "Camera access is not supported. Please use Chrome or Edge."
+        );
+
+        return;
+      }
+
+
+      try {
+
+        const stream =
+          await navigator.mediaDevices.getUserMedia({
+
+            video: {
+              facingMode: "user",
+
+              width: {
+                ideal: 960
+              },
+
+              height: {
+                ideal: 720
+              }
+            },
+
+            audio: false
+
+          });
+
+
+        videoEl.srcObject = stream;
+
+
+        await new Promise((resolve) => {
+
+          videoEl.onloadedmetadata = () => {
+
+            videoEl.play();
+
+            resolve();
+
+          };
+
+        });
+
+
+        startScreen.classList.add(
+          "hidden"
+        );
+
+        statusLabel.classList.add(
+          "visible"
+        );
+
+        errorBox.style.display = "none";
+
+
+        initThree();
+
+        initAudio();
+
+        animate();
+
+        initHandTracking();
+
+
+      } catch (err) {
+
+        console.error(
+          "Camera error:",
+          err
+        );
+
+
+        if (
+          err.name === "NotAllowedError" ||
+          err.name === "PermissionDeniedError"
+        ) {
+
+          showError(
+            "Please allow camera access."
+          );
+
+        } else if (
+          err.name === "NotFoundError"
+        ) {
+
+          showError(
+            "No camera was found."
+          );
+
+        } else if (
+          err.name === "NotReadableError"
+        ) {
+
+          showError(
+            "Camera is already being used by another application."
+          );
+
+        } else {
+
+          showError(
+            "Camera unavailable: " +
+            err.message
+          );
+
+        }
+
+      }
+
+    }
+
+
+    function showError(message) {
+
+      errorBox.style.display = "block";
+
+      errorBox.textContent = message;
+
+    }
+
+
+    /* =========================================================
+       THREE.JS INITIALIZATION
+       ========================================================= */
+
+    function initThree() {
+
+      const canvas =
+        document.getElementById(
+          "three-canvas"
+        );
+
+
+      scene =
+        new THREE.Scene();
+
+
+      camera =
+        new THREE.PerspectiveCamera(
+          55,
+          window.innerWidth /
+          window.innerHeight,
+          0.1,
+          100
+        );
+
+
+      camera.position.set(
+        0,
+        0,
+        0
+      );
+
+
+      renderer =
+        new THREE.WebGLRenderer({
+
+          canvas,
+
+          alpha: true,
+
+          antialias: true
+
+        });
+
+
+      renderer.setSize(
+        window.innerWidth,
+        window.innerHeight
+      );
+
+
+      renderer.setPixelRatio(
+        Math.min(
+          window.devicePixelRatio,
+          2
+        )
+      );
+
+
+      renderer.setClearColor(
+        0x000000,
+        0
+      );
+
+
+      /* LIGHTING */
+
+      const ambient =
+        new THREE.AmbientLight(
+          0xffffff,
+          1.0
+        );
+
+      scene.add(
+        ambient
+      );
+
+
+      const keyLight =
+        new THREE.PointLight(
+          0xfff2d9,
+          1.5,
+          20
+        );
+
+      keyLight.position.set(
+        2,
+        3,
+        2
+      );
+
+      scene.add(
+        keyLight
+      );
+
+
+      const fillLight =
+        new THREE.PointLight(
+          0xa0d8ff,
+          0.8,
+          15
+        );
+
+      fillLight.position.set(
+        -2,
+        -1,
+        2
+      );
+
+      scene.add(
+        fillLight
+      );
+
+
+      /* CHARACTER ROOT */
+
+      character =
+        new THREE.Group();
+
+
+      character.position.set(
+        0,
+        -2,
+        -3
+      );
+
+
+      character.scale.setScalar(
+        0.28
+      );
+
+
+      scene.add(
+        character
+      );
+
+
+      /* VISUAL GROUP */
+
+      visualGroup =
+        new THREE.Group();
+
+
+      character.add(
+        visualGroup
+      );
+
+
+      loadGirlModel();
+
+      createParticleSystem();
+
+      createShadow();
+
+
+      clock =
+        new THREE.Clock();
+
+
+      window.addEventListener(
+        "resize",
+        onResize
+      );
+
+
+      sceneReady = true;
+
+    }
+
+
+    /* =========================================================
+       LOAD GIRL.GLB
+       ========================================================= */
+
+    function loadGirlModel() {
+
+      if (
+        typeof THREE.GLTFLoader ===
+        "undefined"
+      ) {
+
+        showError(
+          "GLTFLoader failed to load."
+        );
+
+        return;
+      }
+
+
+      const loader =
+        new THREE.GLTFLoader();
+
+
+      const modelURL =
+        "models/girl.glb";
+
+
+      loader.load(
+
+        modelURL,
+
+
+        function (gltf) {
+
+          console.log(
+            "Girl model loaded:",
+            gltf
+          );
+
+
+          girlModel =
+            gltf.scene;
+
+
+          /*
+             IMPORTANT:
+             Keep model itself at 1.
+             Character root controls final size.
+          */
+
+          girlModel.scale.setScalar(
+            1
+          );
+
+
+          /*
+             Center the model around its
+             own bounding box.
+          */
+
+          const box =
+            new THREE.Box3().setFromObject(
+              girlModel
+            );
+
+
+          const center =
+            new THREE.Vector3();
+
+
+          box.getCenter(
+            center
+          );
+
+
+          girlModel.position.x -=
+            center.x;
+
+
+          girlModel.position.z -=
+            center.z;
+
+
+          /*
+             Put the feet close to
+             the character origin.
+          */
+
+          const newBox =
+            new THREE.Box3().setFromObject(
+              girlModel
+            );
+
+
+          girlModel.position.y -=
+            newBox.min.y;
+
+
+          girlModel.traverse(
+            function (object) {
+
+              if (
+                object.isMesh
+              ) {
+
+                object.castShadow =
+                  false;
+
+                object.receiveShadow =
+                  false;
+
+                if (
+                  object.material
+                ) {
+
+                  object.material.needsUpdate =
+                    true;
+
+                }
+
+              }
+
+            }
+          );
+
+
+          visualGroup.add(
+            girlModel
+          );
+
+
+          /* =================================================
+             ANIMATION
+             ================================================= */
+
+          const animations =
+            gltf.animations || [];
+
+
+          console.log(
+            "Available animations:",
+            animations.map(
+              animation =>
+                animation.name
+            )
+          );
+
+
+          if (
+            animations.length > 0
+          ) {
+
+            mixer =
+              new THREE.AnimationMixer(
+                girlModel
+              );
+
+
+            let selectedClip =
+              animations.find(
+                animation =>
+                  /dance|dancing|hip|groove|walk/i.test(
+                    animation.name
+                  )
+              );
+
+
+            if (!selectedClip) {
+
+              selectedClip =
+                animations[0];
+
+            }
+
+
+            console.log(
+              "Playing animation:",
+              selectedClip.name
+            );
+
+
+            danceAction =
+              mixer.clipAction(
+                selectedClip
+              );
+
+
+            danceAction.reset();
+
+
+            danceAction.setLoop(
+              THREE.LoopRepeat,
+              Infinity
+            );
+
+
+            danceAction.play();
+
+
+          } else {
+
+            console.warn(
+              "girl.glb has no animation clips."
+            );
+
+            statusLabel.textContent =
+              "👧 Girl loaded — no dance animation found";
+
+          }
+
+
+          /*
+             Very small final size.
+          */
+
+          character.scale.setScalar(
+            0.28
+          );
+
+
+          statusLabel.textContent =
+            "💃 Tiny Girl Dancing! Show your hand";
+
+
+        },
+
+
+        function (progress) {
+
+          if (
+            progress.total
+          ) {
+
+            const percent =
+              Math.round(
+                progress.loaded /
+                progress.total *
+                100
+              );
+
+
+            statusLabel.textContent =
+              "👧 Loading girl... " +
+              percent +
+              "%";
+
+          }
+
+        },
+
+
+        function (error) {
+
+          console.error(
+            "girl.glb loading error:",
+            error
+          );
+
+
+          showError(
+            "Could not load models/girl.glb. Check that the file exists."
+          );
+
+        }
+
+      );
+
+    }
+
+
+    /* =========================================================
+       MEDIAPIPE HAND TRACKING
+       ========================================================= */
+
+    function initHandTracking() {
+
+      try {
+
+        if (
+          typeof Hands ===
+          "undefined"
+        ) {
+
+          throw new Error(
+            "MediaPipe Hands failed to load."
+          );
+
+        }
+
+
+        hands =
+          new Hands({
+
+            locateFile:
+              function (file) {
+
+                return (
+                  "https://cdn.jsdelivr.net/npm/@mediapipe/hands/" +
+                  file
+                );
+
+              }
+
+          });
+
+
+        hands.setOptions({
+
+          maxNumHands: 2,
+
+          modelComplexity: 1,
+
+          minDetectionConfidence: 0.7,
+
+          minTrackingConfidence: 0.6
+
+        });
+
+
+        hands.onResults(
+          onHandResults
+        );
+
+
+        handTrackingActive = true;
+
+
+        async function pump() {
+
+          if (
+            handTrackingActive &&
+            videoEl.readyState >= 2
+          ) {
+
+            try {
+
+              await hands.send({
+                image: videoEl
+              });
+
+            } catch (error) {
+
+              console.warn(
+                "MediaPipe frame error:",
+                error
+              );
+
+            }
+
+          }
+
+
+          requestAnimationFrame(
+            pump
+          );
+
+        }
+
+
+        pump();
+
+
+      } catch (error) {
+
+        console.error(
+          "MediaPipe initialization error:",
+          error
+        );
+
+
+        handTrackingActive = false;
+
+
+        statusLabel.textContent =
+          "🎭 Hand tracking unavailable";
+
+      }
+
+    }
+
+
+    /* =========================================================
+       SMOOTH LANDMARKS
+       ========================================================= */
+
+    function smoothLandmarks(
+      previous,
+      next
+    ) {
+
+      if (!previous) {
+
+        return next.map(
+          point => ({
+
+            x: point.x,
+
+            y: point.y,
+
+            z: point.z
+
+          })
+        );
+
+      }
+
+
+      return next.map(
+        (point, index) => ({
+
+          x:
+            THREE.MathUtils.lerp(
+              previous[index].x,
+              point.x,
+              SMOOTH
+            ),
+
+          y:
+            THREE.MathUtils.lerp(
+              previous[index].y,
+              point.y,
+              SMOOTH
+            ),
+
+          z:
+            THREE.MathUtils.lerp(
+              previous[index].z,
+              point.z,
+              SMOOTH
+            )
+
+        })
+      );
+
+    }
+
+
+    /* =========================================================
+       HAND RESULTS
+       ========================================================= */
+
+    function onHandResults(
+      results
+    ) {
+
+      const list =
+        results.multiHandLandmarks || [];
+
+
+      if (
+        list.length === 0
+      ) {
+
+        primaryMissed++;
+
+        secondaryMissed++;
+
+
+        if (
+          primaryMissed >
+          MISS_LIMIT &&
+          primaryVisible
+        ) {
+
+          primaryVisible =
+            false;
+
+          onPrimaryLost();
+
+        }
+
+
+        if (
+          secondaryMissed >
+          MISS_LIMIT &&
+          secondaryVisible
+        ) {
+
+          secondaryVisible =
+            false;
+
+          onSecondaryLost();
+
+        }
+
+
+        updateStatus();
+
+        return;
+
+      }
+
+
+      /*
+         Keep the same hand as primary
+         when two hands are detected.
+      */
+
+      let primaryIndex = 0;
+
+
+      if (
+        primaryLM &&
+        list.length > 1
+      ) {
+
+        const previousWrist =
+          primaryLM[0];
+
+
+        let bestDistance =
+          Infinity;
+
+
+        list.forEach(
+          function (
+            landmarks,
+            index
+          ) {
+
+            const distance =
+              Math.hypot(
+
+                landmarks[0].x -
+                previousWrist.x,
+
+                landmarks[0].y -
+                previousWrist.y
+
+              );
+
+
+            if (
+              distance <
+              bestDistance
+            ) {
+
+              bestDistance =
+                distance;
+
+              primaryIndex =
+                index;
+
+            }
+
+          }
+        );
+
+      }
+
+
+      const primary =
+        list[primaryIndex];
+
+
+      const secondary =
+        list.length > 1
+          ? list[
+              primaryIndex === 0
+                ? 1
+                : 0
+            ]
+          : null;
+
+
+      primaryMissed = 0;
+
+
+      if (
+        !primaryVisible
+      ) {
+
+        primaryVisible =
+          true;
+
+        onPrimaryAppeared();
+
+      }
+
+
+      primaryLM =
+        smoothLandmarks(
+          primaryLM,
+          primary
+        );
+
+
+      computeAnchorFromHand(
+        primaryLM
+      );
+
+
+      if (
+        secondary
+      ) {
+
+        secondaryMissed = 0;
+
+
+        if (
+          !secondaryVisible
+        ) {
+
+          secondaryVisible =
+            true;
+
+          onSecondaryAppeared();
+
+        }
+
+
+        secondaryLM =
+          smoothLandmarks(
+            secondaryLM,
+            secondary
+          );
+
+
+        computeFingertipFromHand(
+          secondaryLM
+        );
+
+
+      } else {
+
+        secondaryMissed++;
+
+        fingertipActive =
+          false;
+
+
+        if (
+          secondaryMissed >
+          MISS_LIMIT &&
+          secondaryVisible
+        ) {
+
+          secondaryVisible =
+            false;
+
+          onSecondaryLost();
+
+        }
+
+      }
+
+
+      updateStatus();
+
+    }
+
+
+    /* =========================================================
+       PRIMARY HAND ANCHOR
+       ========================================================= */
+
+    function computeAnchorFromHand(
+      landmarks
+    ) {
+
+      const wrist =
+        landmarks[0];
+
+      const indexMCP =
+        landmarks[5];
+
+      const middleMCP =
+        landmarks[9];
+
+      const pinkyMCP =
+        landmarks[17];
+
+
+      /*
+         Palm center.
+
+         This is the important part:
+         girl follows the CENTER of the hand.
+      */
+
+      const palmX =
+        (
+          wrist.x +
+          indexMCP.x +
+          middleMCP.x +
+          pinkyMCP.x
+        ) / 4;
+
+
+      const palmY =
+        (
+          wrist.y +
+          indexMCP.y +
+          middleMCP.y +
+          pinkyMCP.y
+        ) / 4;
+
+
+      /*
+         Camera is mirrored.
+      */
+
+      const mirroredX =
+        1 - palmX;
+
+
+      const ndcX =
+        mirroredX * 2 - 1;
+
+
+      const ndcY =
+        -(palmY * 2 - 1);
+
+
+      /*
+         Estimate hand size.
+      */
+
+      const handSpan =
+        Math.hypot(
+
+          middleMCP.x -
+          wrist.x,
+
+          middleMCP.y -
+          wrist.y
+
+        );
+
+
+      const clampedSpan =
+        THREE.MathUtils.clamp(
+          handSpan,
+          0.08,
+          0.32
+        );
+
+
+      /*
+         Keep girl at a stable AR distance.
+      */
+
+      const distance =
+        THREE.MathUtils.mapLinear(
+
+          clampedSpan,
+
+          0.08,
+          0.32,
+
+          3.8,
+          2.6
+
+        );
+
+
+      const fovRad =
+        THREE.MathUtils.degToRad(
+          camera.fov
+        );
+
+
+      const halfHeight =
+        distance *
+        Math.tan(
+          fovRad / 2
+        );
+
+
+      const halfWidth =
+        halfHeight *
+        camera.aspect;
+
+
+      /*
+         IMPORTANT:
+         Girl is placed directly around
+         the palm center.
+
+         Only a very small upward offset
+         is used so feet sit naturally
+         on the palm.
+      */
+
+      rawAnchor.set(
+
+        ndcX * halfWidth,
+
+        ndcY * halfHeight + 0.20,
+
+        -distance
+
+      );
+
+
+      /*
+         VERY SMALL GIRL.
+
+         Maximum = 0.32
+         Minimum = 0.20
+      */
+
+      rawScaleFactor =
+        THREE.MathUtils.mapLinear(
+
+          distance,
+
+          2.6,
+          3.8,
+
+          0.32,
+          0.20
+
+        );
+
+
+      rawScaleFactor =
+        THREE.MathUtils.clamp(
+
+          rawScaleFactor,
+
+          0.30,
+          0.55
+
+        );
+
+
+      /*
+         Hand tilt.
+      */
+
+      const acrossX =
+        pinkyMCP.x -
+        indexMCP.x;
+
+
+      const acrossY =
+        pinkyMCP.y -
+        indexMCP.y;
+
+
+      rawTiltZ =
+        THREE.MathUtils.clamp(
+
+          Math.atan2(
+            acrossY,
+            Math.abs(acrossX) + 0.001
+          ) * 0.5,
+
+          -0.5,
+          0.5
+
+        );
+
+
+      const upX =
+        middleMCP.x -
+        wrist.x;
+
+
+      const upY =
+        middleMCP.y -
+        wrist.y;
+
+
+      rawTiltX =
+        THREE.MathUtils.clamp(
+
+          Math.atan2(
+            upX,
+            -upY
+          ) * 0.4,
+
+          -0.4,
+          0.4
+
+        );
+
+    }
+
+
+    /* =========================================================
+       SECOND HAND FINGERTIP
+       ========================================================= */
+
+    function computeFingertipFromHand(
+      landmarks
+    ) {
+
+      if (
+        !camera ||
+        !character
+      ) {
+
+        return;
+
+      }
+
+
+      const tip =
+        landmarks[8];
+
+
+      const mirroredX =
+        1 - tip.x;
+
+
+      const ndcX =
+        mirroredX * 2 - 1;
+
+
+      const ndcY =
+        -(tip.y * 2 - 1);
+
+
+      const distance =
+        Math.max(
+          1.5,
+          Math.abs(
+            character.position.z
+          )
+        );
+
+
+      const fovRad =
+        THREE.MathUtils.degToRad(
+          camera.fov
+        );
+
+
+      const halfHeight =
+        distance *
+        Math.tan(
+          fovRad / 2
+        );
+
+
+      const halfWidth =
+        halfHeight *
+        camera.aspect;
+
+
+      fingertipWorld.set(
+
+        ndcX * halfWidth,
+
+        ndcY * halfHeight,
+
+        -distance
+
+      );
+
+
+      fingertipActive =
+        true;
+
+    }
+
+
+    /* =========================================================
+       STATE
+       ========================================================= */
+
+    function onPrimaryAppeared() {
+
+      if (!character) {
+        return;
+      }
+
+
+      character.scale.setScalar(
+        0.001
+      );
+
+    }
+
+
+    function onPrimaryLost() {
+
+    }
+
+
+    function onSecondaryAppeared() {
+
+      statusLabel.textContent =
+        "👉 Touch the dancing girl!";
+
+    }
+
+
+    function onSecondaryLost() {
+
+      fingertipActive =
+        false;
+
+    }
+
+
+    /* =========================================================
+       STATUS
+       ========================================================= */
+
+    function updateStatus() {
+
+      if (!primaryVisible) {
+
+        statusLabel.textContent =
+          "✋ Show your hand";
+
+      } else if (
+        !secondaryVisible
+      ) {
+
+        statusLabel.textContent =
+          "👉 Use your other hand to touch me";
+
+      } else {
+
+        statusLabel.textContent =
+          "👉 Touch me!";
+
+      }
+
+    }
+
+
+    /* =========================================================
+       PARTICLES
+       ========================================================= */
+
+    function createParticleSystem() {
+
+      const MAX =
+        45;
+
+
+      const positions =
+        new Float32Array(
+          MAX * 3
+        );
+
+
+      const geometry =
+        new THREE.BufferGeometry();
+
+
+      geometry.setAttribute(
+
+        "position",
+
+        new THREE.BufferAttribute(
+          positions,
+          3
+        )
+
+      );
+
+
+      const material =
+        new THREE.PointsMaterial({
+
+          color: 0xfff2b8,
+
+          size: 0.045,
+
+          transparent: true,
+
+          opacity: 0,
+
+          depthWrite: false
+
+        });
+
+
+      particleSys =
+        new THREE.Points(
+          geometry,
+          material
+        );
+
+
+      particleSys.userData.life =
+        0;
+
+
+      particleSys.userData.velocities =
+        [];
+
+
+      scene.add(
+        particleSys
+      );
+
+    }
+
+
+    function burstParticles(
+      position
+    ) {
+
+      if (!particleSys) {
+        return;
+      }
+
+
+      const attribute =
+        particleSys.geometry
+          .attributes
+          .position;
+
+
+      particleSys.userData.velocities =
+        [];
+
+
+      for (
+        let i = 0;
+        i < attribute.count;
+        i++
+      ) {
+
+        attribute.setXYZ(
+
+          i,
+
+          position.x,
+
+          position.y,
+
+          position.z
+
+        );
+
+
+        particleSys.userData.velocities.push(
+
+          new THREE.Vector3(
+
+            (Math.random() - 0.5) * 1.5,
+
+            Math.random() * 1.5,
+
+            (Math.random() - 0.5) * 1.5
+
+          )
+
+        );
+
+      }
+
+
+      attribute.needsUpdate =
+        true;
+
+
+      particleSys.material.opacity =
+        0.9;
+
+
+      particleSys.userData.life =
+        0.6;
+
+    }
+
+
+    function updateParticles(
+      delta
+    ) {
+
+      if (
+        !particleSys ||
+        particleSys.userData.life <= 0
+      ) {
+
+        return;
+
+      }
+
+
+      particleSys.userData.life -=
+        delta;
+
+
+      const attribute =
+        particleSys.geometry
+          .attributes
+          .position;
+
+
+      const velocities =
+        particleSys.userData.velocities;
+
+
+      for (
+        let i = 0;
+        i < attribute.count;
+        i++
+      ) {
+
+        const velocity =
+          velocities[i];
+
+
+        attribute.setXYZ(
+
+          i,
+
+          attribute.getX(i) +
+            velocity.x * delta,
+
+          attribute.getY(i) +
+            velocity.y * delta,
+
+          attribute.getZ(i) +
+            velocity.z * delta
+
+        );
+
+
+        velocity.y -=
+          delta * 1.8;
+
+      }
+
+
+      attribute.needsUpdate =
+        true;
+
+
+      particleSys.material.opacity =
+        Math.max(
+          0,
+          particleSys.userData.life / 0.6
+        ) * 0.9;
+
+    }
+
+
+    /* =========================================================
+       SHADOW
+       ========================================================= */
+
+    function createShadow() {
+
+      const geometry =
+        new THREE.CircleGeometry(
+          0.16,
+          24
+        );
+
+
+      const material =
+        new THREE.MeshBasicMaterial({
+
+          color: 0x000000,
+
+          transparent: true,
+
+          opacity: 0.22
+
+        });
+
+
+      shadowDisc =
+        new THREE.Mesh(
+          geometry,
+          material
+        );
+
+
+      shadowDisc.rotation.x =
+        -Math.PI / 2;
+
+
+      scene.add(
+        shadowDisc
+      );
+
+    }
+
+
+    function updateShadow() {
+
+      if (
+        !character ||
+        !shadowDisc
+      ) {
+
+        return;
+
+      }
+
+
+      const worldPosition =
+        new THREE.Vector3();
+
+
+      character.getWorldPosition(
+        worldPosition
+      );
+
+
+      const scale =
+        Math.max(
+          character.scale.x,
+          0.05
+        );
+
+
+      shadowDisc.position.set(
+
+        worldPosition.x,
+
+        worldPosition.y - 0.15,
+
+        worldPosition.z
+
+      );
+
+
+      const shadowScale =
+        scale *
+        THREE.MathUtils.clamp(
+          1 - Math.abs(
+            physOffset.y
+          ) * 0.5,
+          0.45,
+          1
+        );
+
+
+      shadowDisc.scale.set(
+        shadowScale,
+        shadowScale,
+        shadowScale
+      );
+
+
+      shadowDisc.material.opacity =
+        0.22;
+
+    }
+
+
+    /* =========================================================
+       AUDIO
+       ========================================================= */
+
+    function initAudio() {
+
+      try {
+
+        audioCtx =
+          new (
+            window.AudioContext ||
+            window.webkitAudioContext
+          )();
+
+      } catch (error) {
+
+        console.warn(
+          "Web Audio unavailable."
+        );
+
+      }
+
+    }
+
+
+    function playTone(
+      startFrequency,
+      endFrequency,
+      duration,
+      type = "sine",
+      volume = 0.15
+    ) {
+
+      if (!audioCtx) {
+        return;
+      }
+
+
+      if (
+        audioCtx.state ===
+        "suspended"
+      ) {
+
+        audioCtx.resume();
+
+      }
+
+
+      const oscillator =
+        audioCtx.createOscillator();
+
+
+      const gain =
+        audioCtx.createGain();
+
+
+      oscillator.type =
+        type;
+
+
+      oscillator.frequency.setValueAtTime(
+
+        startFrequency,
+
+        audioCtx.currentTime
+
+      );
+
+
+      oscillator.frequency.exponentialRampToValueAtTime(
+
+        Math.max(
+          endFrequency,
+          1
+        ),
+
+        audioCtx.currentTime +
+        duration
+
+      );
+
+
+      gain.gain.setValueAtTime(
+
+        0.0001,
+
+        audioCtx.currentTime
+
+      );
+
+
+      gain.gain.exponentialRampToValueAtTime(
+
+        volume,
+
+        audioCtx.currentTime +
+        0.02
+
+      );
+
+
+      gain.gain.exponentialRampToValueAtTime(
+
+        0.0001,
+
+        audioCtx.currentTime +
+        duration
+
+      );
+
+
+      oscillator
+        .connect(gain)
+        .connect(
+          audioCtx.destination
+        );
+
+
+      oscillator.start();
+
+
+      oscillator.stop(
+
+        audioCtx.currentTime +
+        duration +
+        0.05
+
+      );
+
+    }
+
+
+    function playBoing() {
+
+      playTone(
+        180,
+        500,
+        0.28,
+        "sine",
+        0.18
+      );
+
+    }
+
+
+    function playBoop() {
+
+      playTone(
+        500,
+        220,
+        0.22,
+        "triangle",
+        0.16
+      );
+
+    }
+
+
+    function playPop() {
+
+      playTone(
+        700,
+        900,
+        0.12,
+        "square",
+        0.10
+      );
+
+    }
+
+
+    function playWhee() {
+
+      playTone(
+        300,
+        900,
+        0.35,
+        "sine",
+        0.14
+      );
+
+    }
+
+
+    /* =========================================================
+       TOUCH + PHYSICS
+       ========================================================= */
+
+    function handleTouchInteraction(
+      delta
+    ) {
+
+      lastTouchCooldown =
+        Math.max(
+          0,
+          lastTouchCooldown - delta
+        );
+
+
+      if (
+        fingertipActive &&
+        lastTouchCooldown <= 0
+      ) {
+
+        const center =
+          new THREE.Vector3();
+
+
+        character.getWorldPosition(
+          center
+        );
+
+
+        const dx =
+          fingertipWorld.x -
+          center.x;
+
+
+        const dy =
+          fingertipWorld.y -
+          center.y;
+
+
+        const distance =
+          Math.hypot(
+            dx,
+            dy
+          );
+
+
+        if (
+          distance <
+          TOUCH_DISTANCE
+        ) {
+
+          lastTouchCooldown =
+            0.45;
+
+
+          /* TOP TOUCH */
+
+          if (
+            Math.abs(dy) >
+              Math.abs(dx) &&
+            dy > 0
+          ) {
+
+            physVelocity.y -=
+              2.5;
+
+            squashVelocity -=
+              4.5;
+
+            expressionTimer =
+              0.5;
+
+            playPop();
+
+          }
+
+
+          /* BOTTOM TOUCH */
+
+          else if (
+            Math.abs(dy) >
+              Math.abs(dx) &&
+            dy < 0
+          ) {
+
+            physVelocity.y +=
+              3.5;
+
+            expressionTimer =
+              0.5;
+
+            playWhee();
+
+          }
+
+
+          /* LEFT TOUCH */
+
+          else if (
+            dx < 0
+          ) {
+
+            physVelocity.x +=
+              2.8;
+
+            physRotVelocityZ -=
+              3.2;
+
+            expressionTimer =
+              0.5;
+
+            playBoing();
+
+          }
+
+
+          /* RIGHT TOUCH */
+
+          else {
+
+            physVelocity.x -=
+              2.8;
+
+            physRotVelocityZ +=
+              3.2;
+
+            expressionTimer =
+              0.5;
+
+            playBoop();
+
+          }
+
+
+          burstParticles(
+            center
+          );
+
+        }
+
+      }
+
+
+      /* SPRING PHYSICS */
+
+      const forceX =
+        -SPRING_K *
+        physOffset.x;
+
+
+      const forceY =
+        -SPRING_K *
+        physOffset.y;
+
+
+      physVelocity.x +=
+        (
+          forceX -
+          DAMPING *
+          physVelocity.x
+        ) * delta;
+
+
+      physVelocity.y +=
+        (
+          forceY -
+          DAMPING *
+          physVelocity.y
+        ) * delta;
+
+
+      physOffset.x +=
+        physVelocity.x *
+        delta;
+
+
+      physOffset.y +=
+        physVelocity.y *
+        delta;
+
+
+      /* ROTATION SPRING */
+
+      const rotationForce =
+        -SPRING_K *
+        physRotOffsetZ;
+
+
+      physRotVelocityZ +=
+        (
+          rotationForce -
+          DAMPING *
+          physRotVelocityZ
+        ) * delta;
+
+
+      physRotOffsetZ +=
+        physRotVelocityZ *
+        delta;
+
+
+      /* SQUASH SPRING */
+
+      const squashForce =
+        -SPRING_K *
+        (squash - 1);
+
+
+      squashVelocity +=
+        (
+          squashForce -
+          DAMPING *
+          squashVelocity
+        ) * delta;
+
+
+      squash +=
+        squashVelocity *
+        delta;
+
+
+      squash =
+        THREE.MathUtils.clamp(
+          squash,
+          0.65,
+          1.35
+        );
+
+
+      if (
+        expressionTimer > 0
+      ) {
+
+        expressionTimer -=
+          delta;
+
+      }
+
+    }
+
+
+    /* =========================================================
+       CHARACTER FOLLOW HAND
+       ========================================================= */
+
+    function updateCharacterPosition(
+      delta
+    ) {
+
+      if (!character) {
+        return;
+      }
+
+
+      if (
+        !primaryVisible
+      ) {
+
+        character.scale.multiplyScalar(
+          0.94
+        );
+
+        return;
+
+      }
+
+
+      /*
+         Smooth hand following.
+      */
+
+      const followAmount =
+        Math.min(
+          delta * 12,
+          1
+        );
+
+
+      /*
+         IMPORTANT:
+         No cumulative += movement.
+
+         Character is always calculated
+         from the CURRENT hand center.
+      */
+
+      const targetX =
+        rawAnchor.x +
+        physOffset.x * 0.22;
+
+
+      const targetY =
+        rawAnchor.y +
+        physOffset.y * 0.22;
+
+
+      const targetZ =
+        rawAnchor.z;
+
+
+      character.position.x =
+        THREE.MathUtils.lerp(
+
+          character.position.x,
+
+          targetX,
+
+          followAmount
+
+        );
+
+
+      character.position.y =
+        THREE.MathUtils.lerp(
+
+          character.position.y,
+
+          targetY,
+
+          followAmount
+
+        );
+
+
+      character.position.z =
+        THREE.MathUtils.lerp(
+
+          character.position.z,
+
+          targetZ,
+
+          followAmount
+
+        );
+
+
+      /*
+         Small and stable size.
+      */
+
+      const targetScale =
+        rawScaleFactor;
+
+
+      const currentScale =
+        character.scale.x;
+
+
+      const newScale =
+        THREE.MathUtils.lerp(
+
+          currentScale,
+
+          targetScale,
+
+          Math.min(
+            delta * 8,
+            1
+          )
+
+        );
+
+
+      character.scale.setScalar(
+        newScale
+      );
+
+
+      /*
+         Hand tilt.
+      */
+
+      smoothTilt =
+        THREE.MathUtils.lerp(
+
+          smoothTilt,
+
+          rawTiltZ,
+
+          Math.min(
+            delta * 6,
+            1
+          )
+
+        );
+
+
+      smoothTiltX =
+        THREE.MathUtils.lerp(
+
+          smoothTiltX,
+
+          rawTiltX,
+
+          Math.min(
+            delta * 6,
+            1
+          )
+
+        );
+
+    }
+
+
+    /* =========================================================
+       GIRL DANCE
+       ========================================================= */
+
+    function updateDance(
+      delta
+    ) {
+
+      danceTime +=
+        delta;
+
+
+      /*
+         Real GLB animation.
+      */
+
+      if (
+        mixer
+      ) {
+
+        mixer.update(
+          delta
+        );
+
+      }
+
+
+      /*
+         Tiny extra movement.
+      */
+
+      if (
+        visualGroup
+      ) {
+
+        const bounce =
+          Math.abs(
+            Math.sin(
+              danceTime * 4
+            )
+          ) * 0.012;
+
+
+        visualGroup.position.y =
+          bounce;
+
+
+        visualGroup.rotation.y =
+          Math.sin(
+            danceTime * 1.2
+          ) * 0.06;
+
+      }
+
+
+      /*
+         Squash and stretch.
+      */
+
+      if (
+        visualGroup
+      ) {
+
+        const safeSquash =
+          Math.max(
+            squash,
+            0.01
+          );
+
+
+        visualGroup.scale.x =
+          1 /
+          Math.sqrt(
+            safeSquash
+          );
+
+
+        visualGroup.scale.z =
+          1 /
+          Math.sqrt(
+            safeSquash
+          );
+
+
+        visualGroup.scale.y =
+          safeSquash;
+
+      }
+
+
+      /*
+         Character lean.
+      */
+
+      if (
+        character
+      ) {
+
+        character.rotation.z =
+          smoothTilt +
+          physRotOffsetZ;
+
+
+        character.rotation.x =
+          smoothTiltX;
+
+      }
+
+    }
+
+
+    /* =========================================================
+       RESIZE
+       ========================================================= */
+
+    function onResize() {
+
+      if (
+        !camera ||
+        !renderer
+      ) {
+
+        return;
+
+      }
+
+
+      camera.aspect =
+        window.innerWidth /
+        window.innerHeight;
+
+
+      camera.updateProjectionMatrix();
+
+
+      renderer.setSize(
+
+        window.innerWidth,
+
+        window.innerHeight
+
+      );
+
+    }
+
+
+    /* =========================================================
+       MAIN ANIMATION LOOP
+       ========================================================= */
+
+    function animate() {
+
+      requestAnimationFrame(
+        animate
+      );
+
+
+      if (
+        !sceneReady
+      ) {
+
+        return;
+
+      }
+
+
+      const delta =
+        Math.min(
+          clock.getDelta(),
+          0.1
+        );
+
+
+      updateCharacterPosition(
+        delta
+      );
+
+
+      handleTouchInteraction(
+        delta
+      );
+
+
+      updateDance(
+        delta
+      );
+
+
+      updateParticles(
+        delta
+      );
+
+
+      updateShadow();
+
+
+      renderer.render(
+        scene,
+        camera
+      );
+
+    }
+
+  </script>
+
+</body>
+</html>

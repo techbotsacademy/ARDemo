@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>🦋 Butterfly on My Hand AR</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden; background: #05050a;
+    font-family: 'Segoe UI', Arial, sans-serif;
+  }
+
+  /* Live camera feed, mirrored like a selfie camera */
+  #camera-feed {
+    position: fixed; top: 0; left: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+    z-index: 1;
+    transform: scaleX(-1);
+  }
+
+  /* Transparent Three.js canvas sits above the camera */
+  #three-canvas {
+    position: fixed; top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  #start-screen {
+    position: fixed; inset: 0; z-index: 10;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    text-align: center;
+    background: radial-gradient(circle at 50% 40%, #241a3d 0%, #0a0714 70%);
+    color: #fff;
+    transition: opacity 0.7s ease;
+  }
+
+  #start-screen h1 {
+    font-size: clamp(2rem, 6vw, 3.2rem);
+    margin: 0 0 10px 0;
+    background: linear-gradient(90deg, #ffd1e8, #b39dff, #9be8ff);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    text-shadow: 0 0 40px rgba(179, 157, 255, 0.35);
+  }
+
+  #start-screen p {
+    font-size: clamp(0.95rem, 2.2vw, 1.2rem);
+    color: #cfc9e8; margin: 0 0 34px 0;
+  }
+
+  #start-btn {
+    padding: 16px 40px; font-size: 1.05rem; font-weight: 600;
+    color: #1a1130;
+    background: linear-gradient(135deg, #ffe1f2, #c9b8ff 55%, #9be8ff);
+    border: none; border-radius: 999px; cursor: pointer;
+    box-shadow: 0 8px 30px rgba(155, 130, 255, 0.45);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+  }
+
+  #start-btn:hover { transform: translateY(-2px) scale(1.03); }
+
+  #start-screen.hidden { opacity: 0; pointer-events: none; }
+
+  #status-label {
+    position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+    z-index: 5; color: rgba(255,255,255,0.9);
+    font-size: 0.95rem; letter-spacing: 0.3px;
+    background: rgba(20,10,35,0.35);
+    padding: 8px 18px; border-radius: 999px;
+    backdrop-filter: blur(4px);
+    text-shadow: 0 0 10px rgba(0,0,0,0.5);
+    opacity: 0; transition: opacity 0.5s ease;
+    pointer-events: none;
+  }
+  #status-label.visible { opacity: 1; }
+
+  #error-message {
+    position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+    z-index: 20; background: rgba(120,20,20,0.85); color:#fff;
+    padding: 12px 20px; border-radius: 10px; font-size: 0.9rem;
+    max-width: 80%; text-align: center; display: none;
+  }
+</style>
+</head>
+<body>
+
+  <video id="camera-feed" autoplay playsinline muted></video>
+  <canvas id="three-canvas"></canvas>
+
+  <div id="status-label">✋ Show your hand</div>
+  <div id="error-message"></div>
+
+  <div id="start-screen">
+    <h1>🦋 BUTTERFLY MAGIC</h1>
+    <p>Let a butterfly land on your hand</p>
+    <button id="start-btn">START CAMERA</button>
+  </div>
+
+  <!-- Three.js for the 3D butterfly -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <!-- MediaPipe Hands for hand tracking -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+
+  <script>
+  /* =======================================================================
+     BUTTERFLY ON MY HAND AR
+     Single-file WebAR experience: MediaPipe Hands tracks the hand,
+     Three.js renders a procedural 3D butterfly that lands on it and
+     follows it as it moves.
+
+     Run through a local server (camera access is blocked on file://):
+         python -m http.server 8000
+     then open http://localhost:8000
+  ========================================================================== */
+
+  // -----------------------------------------------------------------------
+  // 1. CAMERA SETUP
+  // -----------------------------------------------------------------------
+  const startScreen = document.getElementById('start-screen');
+  const startBtn     = document.getElementById('start-btn');
+  const videoEl      = document.getElementById('camera-feed');
+  const statusLabel  = document.getElementById('status-label');
+  const errorBox     = document.getElementById('error-message');
+
+  let mpCamera = null;
+  let sceneReady = false;
+
+  startBtn.addEventListener('click', () => {
+    startScreen.classList.add('hidden');
+    statusLabel.classList.add('visible');
+    initThree();
+    initHandTracking();
+    animate();
+  });
+
+  // -----------------------------------------------------------------------
+  // 2. MEDIAPIPE SETUP
+  // -----------------------------------------------------------------------
+  let hands;
+
+  function initHandTracking() {
+    hands = new Hands({
+      locateFile: (file) =>
+        `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+    });
+
+    hands.setOptions({
+      maxNumHands: 1,           // track one hand only, for performance
+      modelComplexity: 1,
+      minDetectionConfidence: 0.7,
+      minTrackingConfidence: 0.6
+    });
+
+    hands.onResults(onHandResults);
+
+    // MediaPipe's Camera utility requests getUserMedia and feeds frames
+    mpCamera = new Camera(videoEl, {
+      onFrame: async () => {
+        await hands.send({ image: videoEl });
+      },
+      width: 640,
+      height: 480
+    });
+
+    mpCamera.start().catch((err) => {
+      errorBox.style.display = 'block';
+      errorBox.textContent = 'Please allow camera access to experience Butterfly Magic.';
+      console.error('Camera error:', err);
+    });
+  }
+
+  // -----------------------------------------------------------------------
+  // 3. HAND LANDMARK DETECTION -> STATE
+  // -----------------------------------------------------------------------
+  let handVisible = false;
+  let missedFrames = 0;
+  const MISSED_FRAMES_TO_LOSE_HAND = 12; // debounce so it doesn't flicker
+
+  // Raw target values derived from the latest hand landmarks
+  let rawTarget = new THREE.Vector3(0, -3, -2.5); // start off-screen, low
+  let rawScaleFactor = 0.8;
+  let rawTiltZ = 0;
+  let rawTiltX = 0;
+
+  function onHandResults(results) {
+    if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+      missedFrames = 0;
+      if (!handVisible) {
+        handVisible = true;
+        onHandAppeared();
+      }
+      const lm = results.multiHandLandmarks[0];
+      computeHandTarget(lm);
+    } else {
+      missedFrames++;
+      if (handVisible && missedFrames > MISSED_FRAMES_TO_LOSE_HAND) {
+        handVisible = false;
+        onHandLost();
+      }
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // 4. HAND POSITION CALCULATION (back of hand + depth + tilt)
+  // -----------------------------------------------------------------------
+  function computeHandTarget(lm) {
+    // Key landmarks: 0 = wrist, 5 = index MCP, 9 = middle MCP, 17 = pinky MCP
+    const wrist    = lm[0];
+    const indexMCP = lm[5];
+    const midMCP   = lm[9];
+    const pinkyMCP = lm[17];
+
+    // Average of wrist + index MCP + middle MCP gives a stable point
+    // roughly over the back of the hand (not inside the palm).
+    const backX = (wrist.x + indexMCP.x + midMCP.x) / 3;
+    const backY = (wrist.y + indexMCP.y + midMCP.y) / 3;
+
+    // Mirror X to match the mirrored (selfie-style) video the user sees
+    const mirroredX = 1 - backX;
+
+    // Convert to normalized device coordinates (-1 to 1), Y flipped
+    const ndcX = mirroredX * 2 - 1;
+    const ndcY = -(backY * 2 - 1);
+
+    // --- DEPTH ESTIMATION from hand size ---
+    // A bigger hand (larger span) means the hand is closer to the camera.
+    const span = Math.hypot(midMCP.x - wrist.x, midMCP.y - wrist.y);
+    const clampedSpan = THREE.MathUtils.clamp(span, 0.08, 0.32);
+    // Closer hand -> smaller "distance" value -> bigger/faster butterfly
+    const dist = THREE.MathUtils.mapLinear(clampedSpan, 0.08, 0.32, 4.2, 1.6);
+
+    // Unproject the NDC point onto a plane at this depth in front of the camera
+    const fovRad = THREE.MathUtils.degToRad(camera.fov);
+    const halfHeight = dist * Math.tan(fovRad / 2);
+    const halfWidth = halfHeight * camera.aspect;
+
+    const worldX = ndcX * halfWidth;
+    const worldY = ndcY * halfHeight;
+    const worldZ = -dist;
+
+    // Sit slightly ABOVE the back-of-hand point, not inside the palm
+    rawTarget.set(worldX, worldY + 0.18, worldZ);
+
+    // Scale grows as the hand gets closer (dist gets smaller)
+    rawScaleFactor = THREE.MathUtils.mapLinear(dist, 1.6, 4.2, 1.25, 0.7);
+
+    // --- HAND TILT / ROTATION ---
+    // Vector across the hand (index MCP -> pinky MCP), mirrored on X
+    const acrossX = (1 - pinkyMCP.x) - (1 - indexMCP.x);
+    const acrossY = pinkyMCP.y - indexMCP.y;
+    rawTiltZ = THREE.MathUtils.clamp(Math.atan2(acrossY, Math.abs(acrossX) + 0.001) * 0.6, -0.6, 0.6);
+
+    // Vector up the hand (wrist -> middle MCP), used for forward/back tilt
+    const upX = (1 - midMCP.x) - (1 - wrist.x);
+    const upY = midMCP.y - wrist.y;
+    rawTiltX = THREE.MathUtils.clamp(Math.atan2(upX, -upY) * 0.5, -0.5, 0.5);
+  }
+
+  // -----------------------------------------------------------------------
+  // 5. BUTTERFLY STATE MACHINE (approach -> land -> attached -> leave)
+  // -----------------------------------------------------------------------
+  let flightState = 'searching'; // searching | approaching | landing | attached | leaving
+  let landingTimer = 0;
+  let sparkleTriggered = false;
+
+  function onHandAppeared() {
+    flightState = 'approaching';
+    statusLabel.textContent = '🦋 A butterfly found you!';
+    sparkleTriggered = false;
+    // Start the butterfly a little further away so it visibly "flies in"
+    butterfly.position.set(rawTarget.x + 1.2, rawTarget.y + 1.0, rawTarget.z - 1.5);
+  }
+
+  function onHandLost() {
+    flightState = 'leaving';
+    statusLabel.textContent = '✋ Show your hand';
+  }
+
+  // -----------------------------------------------------------------------
+  // 6. BUTTERFLY CREATION (procedural, no external model files)
+  // -----------------------------------------------------------------------
+  let scene, camera, renderer, clock;
+  let butterfly, leftWing, rightWing, glowLight, sparkles;
+  let wingFlapSpeed = 10;
+  let wingFlapPhase = 0;
+
+  function initThree() {
+    const canvas = document.getElementById('three-canvas');
+
+    scene = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 0, 0);
+
+    renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setClearColor(0x000000, 0);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+
+    const pointLight = new THREE.PointLight(0xfff2d9, 1.1, 20);
+    pointLight.position.set(2, 3, 1);
+    scene.add(pointLight);
+
+    const softLight = new THREE.PointLight(0xb98cff, 0.7, 15);
+    softLight.position.set(-2, -1, 1);
+    scene.add(softLight);
+
+    createButterfly();
+    createSparkles();
+
+    clock = new THREE.Clock();
+    window.addEventListener('resize', onResize);
+    sceneReady = true;
+  }
+
+  function onResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+
+  function createWingShape() {
+    const shape = new THREE.Shape();
+    shape.moveTo(0, 0);
+    shape.bezierCurveTo(0.15, 0.55, 0.75, 0.75, 1.05, 0.35);
+    shape.bezierCurveTo(1.3, 0.05, 1.05, -0.35, 0.65, -0.45);
+    shape.bezierCurveTo(0.55, -0.55, 0.25, -0.5, 0.05, -0.3);
+    shape.bezierCurveTo(-0.05, -0.15, -0.05, -0.05, 0, 0);
+    const geometry = new THREE.ShapeGeometry(shape, 12);
+    geometry.computeVertexNormals();
+    return geometry;
+  }
+
+  function createButterfly() {
+    butterfly = new THREE.Group();
+
+    // Body
+    const bodyGeo = new THREE.SphereGeometry(0.05, 12, 12);
+    bodyGeo.scale(1, 2.4, 1);
+    const bodyMat = new THREE.MeshStandardMaterial({
+      color: 0x2b2320, roughness: 0.6, emissive: 0x1a0f0a, emissiveIntensity: 0.2
+    });
+    butterfly.add(new THREE.Mesh(bodyGeo, bodyMat));
+
+    // Head
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 10), bodyMat);
+    head.position.set(0, 0.14, 0);
+    butterfly.add(head);
+
+    // Antennae
+    [-1, 1].forEach((side) => {
+      const curve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(0, 0.14, 0),
+        new THREE.Vector3(side * 0.035, 0.22, 0.02),
+        new THREE.Vector3(side * 0.08, 0.29, 0.04)
+      ]);
+      const tubeGeo = new THREE.TubeGeometry(curve, 8, 0.004, 6, false);
+      butterfly.add(new THREE.Mesh(tubeGeo, bodyMat));
+    });
+
+    // Wing material - soft, glowing, transparent
+    const wingColors = [0xff9ecf, 0xffb37b, 0x9ecbff];
+    const chosenColor = wingColors[Math.floor(Math.random() * wingColors.length)];
+    const wingMat = new THREE.MeshPhysicalMaterial({
+      color: chosenColor, transparent: true, opacity: 0.85,
+      roughness: 0.35, emissive: chosenColor, emissiveIntensity: 0.35,
+      side: THREE.DoubleSide, clearcoat: 0.4
+    });
+
+    const wingGeo = createWingShape();
+
+    leftWing = new THREE.Group();
+    const leftMesh = new THREE.Mesh(wingGeo, wingMat);
+    leftMesh.scale.set(-0.7, 0.7, 0.7);
+    leftWing.add(leftMesh);
+    leftWing.position.set(0, 0.04, 0);
+    butterfly.add(leftWing);
+
+    rightWing = new THREE.Group();
+    const rightMesh = new THREE.Mesh(wingGeo, wingMat.clone());
+    rightMesh.scale.set(0.7, 0.7, 0.7);
+    rightWing.add(rightMesh);
+    rightWing.position.set(0, 0.04, 0);
+    butterfly.add(rightWing);
+
+    // Smaller hind wings
+    const hindGeo = createWingShape();
+    const hindMatL = wingMat.clone(); hindMatL.opacity = 0.65;
+    const hindMatR = hindMatL.clone();
+
+    const hindLeft = new THREE.Mesh(hindGeo, hindMatL);
+    hindLeft.scale.set(-0.42, 0.42, 0.42);
+    hindLeft.position.set(-0.01, -0.04, -0.01);
+    leftWing.add(hindLeft);
+
+    const hindRight = new THREE.Mesh(hindGeo, hindMatR);
+    hindRight.scale.set(0.42, 0.42, 0.42);
+    hindRight.position.set(0.01, -0.04, -0.01);
+    rightWing.add(hindRight);
+
+    // Soft glow light + soft shadow-glow disc underneath
+    glowLight = new THREE.PointLight(chosenColor, 0.8, 1.6);
+    glowLight.position.set(0, 0, 0.08);
+    butterfly.add(glowLight);
+
+    const shadowGeo = new THREE.CircleGeometry(0.12, 20);
+    const shadowMat = new THREE.MeshBasicMaterial({
+      color: chosenColor, transparent: true, opacity: 0.18
+    });
+    const shadowDisc = new THREE.Mesh(shadowGeo, shadowMat);
+    shadowDisc.rotation.x = -Math.PI / 2;
+    shadowDisc.position.set(0, -0.1, 0);
+    butterfly.add(shadowDisc);
+
+    butterfly.scale.set(0.001, 0.001, 0.001); // invisible until a hand appears
+    butterfly.position.set(0, -3, -2.5);
+    scene.add(butterfly);
+  }
+
+  // -----------------------------------------------------------------------
+  // TINY SPARKLE / FLOATING PARTICLES AROUND THE BUTTERFLY
+  // -----------------------------------------------------------------------
+  function createSparkles() {
+    const count = 24;
+    const positions = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      positions[i * 3]     = (Math.random() - 0.5) * 0.5;
+      positions[i * 3 + 1] = (Math.random() - 0.5) * 0.5;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 0.5;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const mat = new THREE.PointsMaterial({
+      color: 0xffe9ff, size: 0.015, transparent: true, opacity: 0.6, depthWrite: false
+    });
+    sparkles = new THREE.Points(geo, mat);
+    butterfly.add(sparkles);
+  }
+
+  function popLandingSparkle() {
+    // Brief opacity/size pulse to sell the "landing" moment
+    sparkles.material.opacity = 1.0;
+    sparkles.scale.set(1.8, 1.8, 1.8);
+  }
+
+  // -----------------------------------------------------------------------
+  // 7 & 8. BUTTERFLY FOLLOWING THE HAND + ROTATION
+  // -----------------------------------------------------------------------
+  let smoothTilt = 0;
+  let smoothTiltX = 0;
+
+  function updateButterflyPosition(delta) {
+    if (flightState === 'searching') return;
+
+    if (flightState === 'leaving') {
+      // Shrink and drift down/away when the hand disappears
+      butterfly.scale.multiplyScalar(0.94);
+      butterfly.position.y -= delta * 0.4;
+      if (butterfly.scale.x < 0.02) flightState = 'searching';
+      return;
+    }
+
+    const distToTarget = butterfly.position.distanceTo(rawTarget);
+
+    if (flightState === 'approaching') {
+      // Fly toward the hand at a normal, energetic speed
+      butterfly.position.lerp(rawTarget, Math.min(delta * 3.2, 1));
+      butterfly.scale.lerp(
+        new THREE.Vector3(rawScaleFactor, rawScaleFactor, rawScaleFactor),
+        Math.min(delta * 3, 1)
+      );
+      if (distToTarget < 0.35) {
+        flightState = 'landing';
+        landingTimer = 0;
+      }
+    } else if (flightState === 'landing') {
+      // Slow down and settle gently onto the hand
+      landingTimer += delta;
+      butterfly.position.lerp(rawTarget, Math.min(delta * 1.6, 1));
+      if (landingTimer > 0.5) {
+        flightState = 'attached';
+        if (!sparkleTriggered) {
+          popLandingSparkle();
+          sparkleTriggered = true;
+          statusLabel.textContent = '✨ Keep moving your hand';
+        }
+      }
+    } else if (flightState === 'attached') {
+      // Follow the hand smoothly with no lag/shake
+      butterfly.position.lerp(rawTarget, Math.min(delta * 8, 1));
+      butterfly.scale.lerp(
+        new THREE.Vector3(rawScaleFactor, rawScaleFactor, rawScaleFactor),
+        Math.min(delta * 4, 1)
+      );
+      // Ease the landing sparkle burst back down to a gentle idle shimmer
+      sparkles.material.opacity = THREE.MathUtils.lerp(sparkles.material.opacity, 0.45, delta * 2);
+      sparkles.scale.lerp(new THREE.Vector3(1, 1, 1), delta * 2);
+    }
+
+    // Smooth rotation toward the hand's tilt
+    smoothTilt = THREE.MathUtils.lerp(smoothTilt, rawTiltZ, delta * 5);
+    smoothTiltX = THREE.MathUtils.lerp(smoothTiltX, rawTiltX, delta * 5);
+    butterfly.rotation.z = smoothTilt;
+    butterfly.rotation.x = smoothTiltX;
+  }
+
+  // -----------------------------------------------------------------------
+  // 9. WING FLAP ANIMATION
+  // -----------------------------------------------------------------------
+  function updateWings(delta) {
+    let targetSpeed;
+    if (flightState === 'approaching') targetSpeed = 13;
+    else if (flightState === 'landing') targetSpeed = 8;
+    else if (flightState === 'attached') targetSpeed = 5;
+    else targetSpeed = 9;
+
+    wingFlapSpeed = THREE.MathUtils.lerp(wingFlapSpeed, targetSpeed, delta * 1.5);
+    wingFlapPhase += delta * wingFlapSpeed;
+
+    const jitter = Math.sin(wingFlapPhase * 2.3 + 1.1) * 0.06;
+    const flap = Math.sin(wingFlapPhase) * 0.85 + jitter;
+
+    leftWing.rotation.y = flap;
+    rightWing.rotation.y = -flap;
+  }
+
+  // -----------------------------------------------------------------------
+  // 10. ANIMATION LOOP
+  // -----------------------------------------------------------------------
+  function animate() {
+    requestAnimationFrame(animate);
+    if (!sceneReady) return;
+
+    const delta = Math.min(clock.getDelta(), 0.1);
+
+    updateButterflyPosition(delta);
+    updateWings(delta);
+
+    renderer.render(scene, camera);
+  }
+  </script>
+</body>
+</html>

@@ -1,0 +1,3555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+
+<title>AI WebAR Hologram Cube</title>
+
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://docs.opencv.org/4.x/opencv.js"></script>
+
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
+
+<style>
+* {
+    box-sizing: border-box;
+}
+
+
+html,
+body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #02050a;
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+
+#camera {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: 1;
+    background: #000;
+}
+
+
+#threeCanvas {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 3;
+    pointer-events: none;
+}
+
+
+#startScreen {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+
+    background:
+        radial-gradient(circle at center,
+            rgba(0,255,170,0.10),
+            rgba(0,0,0,0.96) 65%);
+
+
+    color: white;
+}
+
+
+.startBox {
+    width: min(90%, 430px);
+    padding: 32px 25px;
+
+
+    text-align: center;
+
+
+    border: 1px solid rgba(0,255,170,0.35);
+    border-radius: 22px;
+
+
+    background: rgba(2,10,15,0.82);
+
+
+    box-shadow:
+        0 0 40px rgba(0,255,170,0.12),
+        inset 0 0 30px rgba(0,255,170,0.04);
+
+
+    backdrop-filter: blur(12px);
+}
+
+
+.startBox h1 {
+    margin: 0 0 10px;
+    font-size: 27px;
+    letter-spacing: 1px;
+}
+
+
+.startBox p {
+    margin: 8px 0;
+    color: #a9c9c2;
+    line-height: 1.5;
+}
+
+
+#startButton {
+    margin-top: 20px;
+    padding: 14px 30px;
+
+
+    border: 1px solid #00ffb3;
+    border-radius: 12px;
+
+
+    background: rgba(0,255,179,0.10);
+    color: #00ffb3;
+
+
+    font-size: 16px;
+    font-weight: bold;
+
+
+    cursor: pointer;
+
+
+    box-shadow:
+        0 0 20px rgba(0,255,179,0.25);
+
+
+    transition: 0.2s;
+}
+
+
+#startButton:hover {
+    background: rgba(0,255,179,0.20);
+    transform: scale(1.03);
+}
+
+
+#status {
+    position: fixed;
+    top: 15px;
+    left: 15px;
+
+
+    z-index: 10;
+
+
+    padding: 10px 14px;
+
+
+    border-radius: 10px;
+
+
+    background: rgba(0,0,0,0.58);
+    border: 1px solid rgba(0,255,179,0.28);
+
+
+    color: #00ffb3;
+
+
+    font-size: 13px;
+
+
+    backdrop-filter: blur(8px);
+}
+
+
+#instructions {
+    position: fixed;
+    bottom: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+
+
+    z-index: 10;
+
+
+    width: min(92%, 520px);
+
+
+    padding: 12px 16px;
+
+
+    text-align: center;
+
+
+    border-radius: 14px;
+
+
+    background: rgba(0,0,0,0.58);
+    border: 1px solid rgba(0,255,179,0.20);
+
+
+    color: #c7ddd8;
+
+
+    font-size: 13px;
+
+
+    backdrop-filter: blur(8px);
+}
+
+
+#processingCanvas,
+#handCanvas {
+    display: none;
+}
+
+
+/* =========================================================
+   MATH LESSON UI
+========================================================= */
+
+#instructions {
+    transition: opacity 0.4s;
+}
+
+body.lessonOn #instructions {
+    opacity: 0;
+}
+
+#muteBtn {
+    position: fixed;
+    top: 12px;
+    right: 14px;
+    z-index: 12;
+
+    padding: 6px 12px;
+
+    border: 1px solid rgba(0,255,179,0.35);
+    border-radius: 10px;
+
+    background: rgba(0,0,0,0.58);
+    color: #00ffb3;
+
+    font-size: 18px;
+    cursor: pointer;
+
+    backdrop-filter: blur(8px);
+}
+
+#lessonDots {
+    position: fixed;
+    top: 62px;
+    left: 0;
+    right: 0;
+    z-index: 10;
+
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+
+    pointer-events: none;
+}
+
+#lessonDots i {
+    width: 22px;
+    height: 5px;
+    border-radius: 3px;
+    background: rgba(255,255,255,0.22);
+    transition: 0.3s;
+}
+
+#lessonDots i.on {
+    background: #ffe600;
+}
+
+#lessonDots i.cur {
+    background: #00ffcc;
+    box-shadow: 0 0 8px #00ffcc;
+}
+
+#lessonPanel {
+    position: fixed;
+    right: 14px;
+    top: 50%;
+    z-index: 10;
+
+    width: 250px;
+    padding: 14px 16px;
+
+    transform: translate(20px, -50%);
+    opacity: 0;
+    transition: 0.5s;
+    pointer-events: none;
+
+    border: 1px solid rgba(0,255,179,0.30);
+    border-radius: 18px;
+
+    background:
+        linear-gradient(145deg,
+            rgba(255,255,255,0.14),
+            rgba(255,255,255,0.04));
+
+    box-shadow:
+        0 8px 32px rgba(0,0,0,0.35),
+        0 0 24px rgba(0,255,179,0.10),
+        inset 0 1px 0 rgba(255,255,255,0.22);
+
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+
+    color: white;
+}
+
+#lessonPanel.show {
+    opacity: 1;
+    transform: translate(0, -50%);
+}
+
+#lessonPanel h2 {
+    margin: 0 0 8px;
+    font-size: 17px;
+    letter-spacing: 0.4px;
+    color: #00ffcc;
+}
+
+#lessonPanel ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+#lessonPanel li {
+    padding: 7px 0;
+    font-size: 14px;
+    border-top: 1px solid rgba(255,255,255,0.12);
+    color: rgba(255,255,255,0.32);
+    transition: 0.4s;
+}
+
+#lessonPanel li.lit {
+    color: #ffffff;
+}
+
+#lessonPanel li.now {
+    color: #ffe600;
+    text-shadow: 0 0 10px rgba(255,230,0,0.7);
+}
+
+#lessonCard {
+    position: fixed;
+    left: 50%;
+    bottom: 18px;
+    z-index: 10;
+
+    width: min(92vw, 560px);
+    padding: 14px 18px;
+
+    transform: translate(-50%, 20px);
+    opacity: 0;
+    transition: 0.4s;
+    pointer-events: none;
+    text-align: center;
+
+    border: 1px solid rgba(0,255,179,0.30);
+    border-radius: 18px;
+
+    background:
+        linear-gradient(145deg,
+            rgba(255,255,255,0.14),
+            rgba(255,255,255,0.04));
+
+    box-shadow:
+        0 8px 32px rgba(0,0,0,0.35),
+        0 0 24px rgba(0,255,179,0.10),
+        inset 0 1px 0 rgba(255,255,255,0.22);
+
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+
+    color: white;
+}
+
+#lessonCard.show {
+    opacity: 1;
+    transform: translate(-50%, 0);
+}
+
+#lessonCard .tag {
+    margin-bottom: 4px;
+    font-size: 12px;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: #00ffcc;
+}
+
+#lessonCard .big {
+    font-size: 28px;
+    font-weight: 800;
+    line-height: 1.15;
+    text-shadow: 0 0 14px rgba(0,255,204,0.55);
+}
+
+#lessonCard .lines {
+    margin-top: 6px;
+    font-size: 16px;
+    line-height: 1.45;
+    color: #dff7f0;
+}
+
+#lessonCard .lines b {
+    color: #ffe600;
+}
+
+@media (max-width: 760px) {
+
+    #lessonPanel {
+        left: 8px;
+        right: 8px;
+        top: 88px;
+        width: auto;
+        padding: 8px 10px;
+        transform: translateY(-10px);
+    }
+
+    #lessonPanel.show {
+        transform: none;
+    }
+
+    #lessonPanel h2 {
+        margin-bottom: 2px;
+        font-size: 13px;
+    }
+
+    #lessonPanel ul {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        column-gap: 12px;
+    }
+
+    #lessonPanel li {
+        padding: 4px 0;
+        font-size: 11.5px;
+    }
+
+    #lessonCard .big {
+        font-size: 22px;
+    }
+
+    #lessonCard .lines {
+        font-size: 14px;
+    }
+}
+
+</style>
+</head>
+
+
+<body>
+
+
+<video id="camera" autoplay playsinline muted></video>
+
+
+<canvas id="threeCanvas"></canvas>
+
+
+<canvas id="processingCanvas"></canvas>
+<canvas id="handCanvas"></canvas>
+
+
+<div id="status">
+    Waiting for AR...
+</div>
+
+
+<div id="instructions">
+    Show the marker to the camera. When your hand appears,
+    move your thumb and index finger closer or farther to resize the hologram.
+</div>
+
+
+<button id="muteBtn" title="Voice on/off">🔊</button>
+
+<div id="lessonDots"></div>
+
+<div id="lessonPanel">
+    <h2>Cube Mathematics</h2>
+    <ul id="lessonRows"></ul>
+</div>
+
+<div id="lessonCard">
+    <div class="tag"></div>
+    <div class="big"></div>
+    <div class="lines"></div>
+</div>
+
+
+<div id="startScreen">
+
+
+    <div class="startBox">
+
+
+        <h1>⚡ AI WebAR Hologram Cube</h1>
+
+
+        <p>
+            Show the marker to the camera and watch the hologram appear.
+        </p>
+
+
+        <p>
+            🤏 Move thumb + index finger to make the cube smaller or bigger.
+        </p>
+
+
+        <button id="startButton">
+            START AR
+        </button>
+
+
+    </div>
+
+
+</div>
+
+
+<script>
+/* =========================================================
+   ELEMENTS
+========================================================= */
+
+
+const video = document.getElementById("camera");
+const threeCanvas = document.getElementById("threeCanvas");
+const processingCanvas = document.getElementById("processingCanvas");
+const handCanvas = document.getElementById("handCanvas");
+
+
+const statusEl = document.getElementById("status");
+const startScreen = document.getElementById("startScreen");
+const startButton = document.getElementById("startButton");
+
+
+
+
+/* =========================================================
+   GLOBAL STATE
+========================================================= */
+
+
+let cameraStream = null;
+let arStarted = false;
+
+
+let markerVisible = false;
+let lastMarkerTime = 0;
+
+
+let cvReady = false;
+let markerTemplate = null;
+
+
+let handDetected = false;
+
+
+let handScaleTarget = 0.72;
+let handScaleCurrent = 0.72;
+
+
+
+
+/* =========================================================
+   THREE.JS
+========================================================= */
+
+
+let scene;
+let renderer;
+let holoCamera;
+
+
+let cubeGroup;
+
+
+let glassCube;
+let innerCube;
+let edgeGroup;
+
+
+let cornerLights = [];
+let rings = [];
+let particles = [];
+
+
+let haloSprite;
+let centerGlow;
+
+
+
+
+/* =========================================================
+   CUBE SETTINGS
+========================================================= */
+
+
+/*
+    IMPORTANT:
+
+
+    This is a REAL SQUARE CUBE.
+
+
+    X = Y = Z
+
+
+    Do NOT make these values different.
+*/
+
+
+const CUBE_SIZE = 1.0;
+
+
+
+
+/*
+    Fixed 3D viewing angle.
+
+
+    Cube DOES NOT rotate automatically.
+*/
+
+
+const FIXED_ROTATION_X = -0.30;
+const FIXED_ROTATION_Y = 0.52;
+const FIXED_ROTATION_Z = 0;
+
+
+
+
+/* =========================================================
+   INITIALIZE THREE
+========================================================= */
+
+
+function initThree() {
+
+
+    scene = new THREE.Scene();
+
+
+    renderer = new THREE.WebGLRenderer({
+        canvas: threeCanvas,
+        alpha: true,
+        antialias: true
+    });
+
+
+    renderer.setPixelRatio(
+        Math.min(window.devicePixelRatio, 2)
+    );
+
+
+    renderer.setSize(
+        window.innerWidth,
+        window.innerHeight
+    );
+
+
+    renderer.outputEncoding = THREE.sRGBEncoding;
+
+
+    holoCamera = new THREE.PerspectiveCamera(
+        42,
+        window.innerWidth / window.innerHeight,
+        0.01,
+        100
+    );
+
+
+    holoCamera.position.set(0, 0, 7);
+
+
+    createHologramCube();
+
+
+    window.addEventListener("resize", onResize);
+
+
+    animateThree();
+}
+
+
+
+
+/* =========================================================
+   CREATE HOLOGRAM CUBE
+========================================================= */
+
+
+function createHologramCube() {
+
+
+    cubeGroup = new THREE.Group();
+
+
+    /*
+        EXACT SAME SIZE IN ALL 3 DIRECTIONS
+    */
+
+
+    cubeGroup.scale.set(
+        handScaleCurrent,
+        handScaleCurrent,
+        handScaleCurrent
+    );
+
+
+    /*
+        Fixed 3D perspective.
+
+
+        NO automatic rotation.
+    */
+
+
+    cubeGroup.rotation.x = FIXED_ROTATION_X;
+    cubeGroup.rotation.y = FIXED_ROTATION_Y;
+    cubeGroup.rotation.z = FIXED_ROTATION_Z;
+
+
+    scene.add(cubeGroup);
+
+
+
+
+    /* =====================================================
+       GLASS CUBE
+    ===================================================== */
+
+
+    const cubeGeometry = new THREE.BoxGeometry(
+        CUBE_SIZE,
+        CUBE_SIZE,
+        CUBE_SIZE,
+        6,
+        6,
+        6
+    );
+
+
+    const glassMaterial = new THREE.MeshBasicMaterial({
+        color: 0x00ffcc,
+        transparent: true,
+        opacity: 0.075,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide
+    });
+
+
+    glassCube = new THREE.Mesh(
+        cubeGeometry,
+        glassMaterial
+    );
+
+
+    cubeGroup.add(glassCube);
+
+
+
+
+    /* =====================================================
+       MAIN NEON EDGES
+    ===================================================== */
+
+
+    const edgeGeometry = new THREE.EdgesGeometry(
+        new THREE.BoxGeometry(
+            CUBE_SIZE,
+            CUBE_SIZE,
+            CUBE_SIZE
+        )
+    );
+
+
+    const edgeMaterial = new THREE.LineBasicMaterial({
+        color: 0x00ffb3,
+        transparent: true,
+        opacity: 1,
+        blending: THREE.AdditiveBlending
+    });
+
+
+    const edgeLines = new THREE.LineSegments(
+        edgeGeometry,
+        edgeMaterial
+    );
+
+
+    cubeGroup.add(edgeLines);
+
+
+
+
+    /* =====================================================
+       INNER CUBE
+    ===================================================== */
+
+
+    const innerGeometry = new THREE.BoxGeometry(
+        CUBE_SIZE * 0.76,
+        CUBE_SIZE * 0.76,
+        CUBE_SIZE * 0.76
+    );
+
+
+    const innerMaterial = new THREE.MeshBasicMaterial({
+        color: 0x00ccff,
+        transparent: true,
+        opacity: 0.035,
+        wireframe: true,
+        blending: THREE.AdditiveBlending
+    });
+
+
+    innerCube = new THREE.Mesh(
+        innerGeometry,
+        innerMaterial
+    );
+
+
+    cubeGroup.add(innerCube);
+
+
+
+
+    /* =====================================================
+       THICK NEON EDGE TUBES
+    ===================================================== */
+
+
+    createNeonEdges();
+
+
+
+
+    /* =====================================================
+       CORNER LIGHTS
+    ===================================================== */
+
+
+    createCornerLights();
+
+
+
+
+    /* =====================================================
+       CENTER GLOW
+    ===================================================== */
+
+
+    const centerGeometry = new THREE.SphereGeometry(
+        0.105,
+        20,
+        20
+    );
+
+
+    const centerMaterial = new THREE.MeshBasicMaterial({
+        color: 0x00ffff,
+        transparent: true,
+        opacity: 0.95,
+        blending: THREE.AdditiveBlending
+    });
+
+
+    centerGlow = new THREE.Mesh(
+        centerGeometry,
+        centerMaterial
+    );
+
+
+    // cubeGroup.add(centerGlow);
+
+
+
+
+    /* =====================================================
+       ENERGY RINGS
+    ===================================================== */
+
+
+    // createEnergyRings();
+
+
+
+
+    /* =====================================================
+       HOLOGRAM HALO
+    ===================================================== */
+
+
+    // createHalo();
+
+
+    createLessonVisuals();
+
+
+
+
+    /* =====================================================
+       FLOATING PARTICLES
+    ===================================================== */
+
+
+    createParticles();
+
+
+
+
+    /*
+        Start hidden.
+
+
+        It appears only after marker detection.
+    */
+
+
+    cubeGroup.visible = false;
+}
+
+
+
+
+/* =========================================================
+   CREATE NEON EDGES
+========================================================= */
+
+
+function createNeonEdges() {
+
+
+    edgeGroup = new THREE.Group();
+
+
+    const half = CUBE_SIZE / 2;
+
+
+    const points = [
+
+
+        [
+            new THREE.Vector3(-half, -half, -half),
+            new THREE.Vector3( half, -half, -half)
+        ],
+
+
+        [
+            new THREE.Vector3( half, -half, -half),
+            new THREE.Vector3( half,  half, -half)
+        ],
+
+
+        [
+            new THREE.Vector3( half,  half, -half),
+            new THREE.Vector3(-half,  half, -half)
+        ],
+
+
+        [
+            new THREE.Vector3(-half,  half, -half),
+            new THREE.Vector3(-half, -half, -half)
+        ],
+
+
+        [
+            new THREE.Vector3(-half, -half, half),
+            new THREE.Vector3( half, -half, half)
+        ],
+
+
+        [
+            new THREE.Vector3( half, -half, half),
+            new THREE.Vector3( half,  half, half)
+        ],
+
+
+        [
+            new THREE.Vector3( half,  half, half),
+            new THREE.Vector3(-half,  half, half)
+        ],
+
+
+        [
+            new THREE.Vector3(-half,  half, half),
+            new THREE.Vector3(-half, -half, half)
+        ],
+
+
+        [
+            new THREE.Vector3(-half, -half, -half),
+            new THREE.Vector3(-half, -half, half)
+        ],
+
+
+        [
+            new THREE.Vector3( half, -half, -half),
+            new THREE.Vector3( half, -half, half)
+        ],
+
+
+        [
+            new THREE.Vector3( half,  half, -half),
+            new THREE.Vector3( half,  half, half)
+        ],
+
+
+        [
+            new THREE.Vector3(-half,  half, -half),
+            new THREE.Vector3(-half,  half, half)
+        ]
+
+
+    ];
+
+
+
+
+    points.forEach((pair, index) => {
+
+
+        const start = pair[0];
+        const end = pair[1];
+
+
+        const direction = new THREE.Vector3()
+            .subVectors(end, start);
+
+
+        const length = direction.length();
+
+
+        const geometry =
+            new THREE.CylinderGeometry(
+                0.018,
+                0.018,
+                length,
+                8
+            );
+
+
+        const material =
+            new THREE.MeshBasicMaterial({
+                color:
+                    index % 2 === 0
+                        ? 0x00ffcc
+                        : 0x00ccff,
+
+
+                transparent: true,
+                opacity: 0.95,
+
+
+                blending:
+                    THREE.AdditiveBlending
+            });
+
+
+        const line = new THREE.Mesh(
+            geometry,
+            material
+        );
+
+
+        const midpoint = new THREE.Vector3()
+            .addVectors(start, end)
+            .multiplyScalar(0.5);
+
+
+        line.position.copy(midpoint);
+
+
+        line.quaternion.setFromUnitVectors(
+            new THREE.Vector3(0, 1, 0),
+            direction.normalize()
+        );
+
+
+        edgeGroup.add(line);
+
+
+
+
+        /*
+            Soft glow around each edge
+        */
+
+
+        const glowGeometry =
+            new THREE.CylinderGeometry(
+                0.035,
+                0.035,
+                length,
+                8
+            );
+
+
+        const glowMaterial =
+            new THREE.MeshBasicMaterial({
+                color: 0x00ffff,
+                transparent: true,
+                opacity: 0.10,
+                blending: THREE.AdditiveBlending
+            });
+
+
+        const glow = new THREE.Mesh(
+            glowGeometry,
+            glowMaterial
+        );
+
+
+        glow.position.copy(midpoint);
+
+
+        glow.quaternion.copy(
+            line.quaternion
+        );
+
+
+        edgeGroup.add(glow);
+
+
+    });
+
+
+
+
+    cubeGroup.add(edgeGroup);
+}
+
+
+
+
+/* =========================================================
+   GLOW TEXTURE
+========================================================= */
+
+
+function createGlowTexture() {
+
+
+    const canvas =
+        document.createElement("canvas");
+
+
+    canvas.width = 128;
+    canvas.height = 128;
+
+
+    const ctx = canvas.getContext("2d");
+
+
+    const gradient =
+        ctx.createRadialGradient(
+            64,
+            64,
+            0,
+            64,
+            64,
+            64
+        );
+
+
+    gradient.addColorStop(
+        0,
+        "rgba(255,255,255,1)"
+    );
+
+
+    gradient.addColorStop(
+        0.15,
+        "rgba(0,255,255,0.95)"
+    );
+
+
+    gradient.addColorStop(
+        0.40,
+        "rgba(0,255,180,0.35)"
+    );
+
+
+    gradient.addColorStop(
+        1,
+        "rgba(0,255,180,0)"
+    );
+
+
+    ctx.fillStyle = gradient;
+
+
+    ctx.fillRect(
+        0,
+        0,
+        128,
+        128
+    );
+
+
+    return new THREE.CanvasTexture(canvas);
+}
+
+
+
+
+/* =========================================================
+   CORNER LIGHTS
+========================================================= */
+
+
+function createCornerLights() {
+
+
+    const texture =
+        createGlowTexture();
+
+
+    const half = CUBE_SIZE / 2;
+
+
+    const positions = [
+
+
+        [-half, -half, -half],
+        [ half, -half, -half],
+        [ half,  half, -half],
+        [-half,  half, -half],
+
+
+        [-half, -half,  half],
+        [ half, -half,  half],
+        [ half,  half,  half],
+        [-half,  half,  half]
+
+
+    ];
+
+
+
+
+    positions.forEach((position, index) => {
+
+
+        const material =
+            new THREE.SpriteMaterial({
+                map: texture,
+                color:
+                    index % 2 === 0
+                        ? 0x00ffff
+                        : 0x00ff99,
+
+
+                transparent: true,
+                opacity: 0.95,
+
+
+                blending:
+                    THREE.AdditiveBlending,
+
+
+                depthWrite: false
+            });
+
+
+        const sprite =
+            new THREE.Sprite(material);
+
+
+        sprite.position.set(
+            position[0],
+            position[1],
+            position[2]
+        );
+
+
+        sprite.scale.set(
+            0.23,
+            0.23,
+            0.23
+        );
+
+
+        cubeGroup.add(sprite);
+
+
+        cornerLights.push(sprite);
+    });
+}
+
+
+
+
+/* =========================================================
+   ENERGY RINGS
+========================================================= */
+
+
+function createEnergyRings() {
+
+
+    for (let i = 0; i < 2; i++) {
+
+
+        const geometry =
+            new THREE.TorusGeometry(
+                0.72 + i * 0.10,
+                0.012,
+                8,
+                80
+            );
+
+
+        const material =
+            new THREE.MeshBasicMaterial({
+                color:
+                    i === 0
+                        ? 0x00ffff
+                        : 0x00ff88,
+
+
+                transparent: true,
+                opacity:
+                    i === 0
+                        ? 0.55
+                        : 0.30,
+
+
+                blending:
+                    THREE.AdditiveBlending
+            });
+
+
+        const ring =
+            new THREE.Mesh(
+                geometry,
+                material
+            );
+
+
+        ring.rotation.x =
+            Math.PI / 2;
+
+
+        cubeGroup.add(ring);
+
+
+        rings.push(ring);
+    }
+}
+
+
+
+
+/* =========================================================
+   HALO
+========================================================= */
+
+
+function createHalo() {
+
+
+    const texture =
+        createGlowTexture();
+
+
+    const material =
+        new THREE.SpriteMaterial({
+            map: texture,
+            color: 0x00ffcc,
+            transparent: true,
+            opacity: 0.18,
+
+
+            blending:
+                THREE.AdditiveBlending,
+
+
+            depthWrite: false
+        });
+
+
+    haloSprite =
+        new THREE.Sprite(material);
+
+
+    haloSprite.scale.set(
+        2.9,
+        2.9,
+        2.9
+    );
+
+
+    haloSprite.position.set(
+        0,
+        0,
+        -0.15
+    );
+
+
+    cubeGroup.add(haloSprite);
+}
+
+
+
+
+/* =========================================================
+   PARTICLES
+========================================================= */
+
+
+function createParticles() {
+
+
+    const count = 80;
+
+
+    const geometry =
+        new THREE.BufferGeometry();
+
+
+    const positions =
+        new Float32Array(count * 3);
+
+
+    const colors =
+        new Float32Array(count * 3);
+
+
+    for (let i = 0; i < count; i++) {
+
+
+        const radius =
+            0.85 + Math.random() * 0.75;
+
+
+        const angle =
+            Math.random() * Math.PI * 2;
+
+
+        const height =
+            (Math.random() - 0.5) * 1.8;
+
+
+        positions[i * 3] =
+            Math.cos(angle) * radius;
+
+
+        positions[i * 3 + 1] =
+            height;
+
+
+        positions[i * 3 + 2] =
+            Math.sin(angle) * radius;
+
+
+
+
+        if (Math.random() > 0.5) {
+
+
+            colors[i * 3] = 0;
+            colors[i * 3 + 1] = 1;
+            colors[i * 3 + 2] = 0.8;
+
+
+        } else {
+
+
+            colors[i * 3] = 0;
+            colors[i * 3 + 1] = 0.8;
+            colors[i * 3 + 2] = 1;
+
+
+        }
+    }
+
+
+    geometry.setAttribute(
+        "position",
+        new THREE.BufferAttribute(
+            positions,
+            3
+        )
+    );
+
+
+    geometry.setAttribute(
+        "color",
+        new THREE.BufferAttribute(
+            colors,
+            3
+        )
+    );
+
+
+
+
+    const material =
+        new THREE.PointsMaterial({
+            size: 0.035,
+
+
+            vertexColors: true,
+
+
+            transparent: true,
+            opacity: 0.85,
+
+
+            blending:
+                THREE.AdditiveBlending,
+
+
+            depthWrite: false
+        });
+
+
+
+
+    const pointCloud =
+        new THREE.Points(
+            geometry,
+            material
+        );
+
+
+    cubeGroup.add(pointCloud);
+
+
+    particles.push(pointCloud);
+}
+
+
+
+
+/* =========================================================
+   THREE ANIMATION
+========================================================= */
+
+
+function animateThree() {
+
+
+    requestAnimationFrame(
+        animateThree
+    );
+
+
+
+
+    /*
+        IMPORTANT:
+
+
+        Cube NEVER rotates.
+
+
+        Fixed angle is always maintained.
+    */
+
+
+    if (cubeGroup) {
+
+
+        cubeGroup.rotation.x =
+            FIXED_ROTATION_X;
+
+
+        cubeGroup.rotation.y =
+            FIXED_ROTATION_Y;
+
+
+        cubeGroup.rotation.z =
+            FIXED_ROTATION_Z;
+
+
+
+
+        /*
+            Smooth hand-controlled scaling.
+
+
+            X/Y/Z are ALWAYS equal.
+        */
+
+
+        handScaleCurrent +=
+            (handScaleTarget - handScaleCurrent)
+            * 0.10;
+
+
+        cubeGroup.scale.set(
+            handScaleCurrent,
+            handScaleCurrent,
+            handScaleCurrent
+        );
+    }
+
+
+
+
+    /*
+        Only glow/rings/particles animate.
+        Cube itself does NOT rotate.
+    */
+
+
+    const t =
+        performance.now() * 0.001;
+
+
+
+
+    if (centerGlow) {
+
+
+        const pulse =
+            1 +
+            Math.sin(t * 3) * 0.16;
+
+
+        centerGlow.scale.set(
+            pulse,
+            pulse,
+            pulse
+        );
+
+
+        centerGlow.material.opacity =
+            0.72 +
+            Math.sin(t * 3) * 0.20;
+    }
+
+
+
+
+    cornerLights.forEach(
+        (light, index) => {
+
+
+            const pulse =
+                0.20 +
+                Math.sin(
+                    t * 3 +
+                    index * 0.7
+                ) * 0.07;
+
+
+            light.material.opacity =
+                0.72 + pulse;
+        }
+    );
+
+
+
+
+    rings.forEach(
+        (ring, index) => {
+
+
+            ring.rotation.z =
+                Math.sin(
+                    t * 0.7 +
+                    index
+                ) * 0.25;
+
+
+            ring.scale.setScalar(
+                1 +
+                Math.sin(
+                    t * 2 +
+                    index
+                ) * 0.05
+            );
+        }
+    );
+
+
+
+
+    particles.forEach(
+        (particle, index) => {
+
+
+            particle.rotation.y =
+                t * 0.12;
+
+
+            particle.rotation.x =
+                Math.sin(t * 0.25) * 0.08;
+        }
+    );
+
+
+
+
+    lessonFrame(t);
+
+
+    renderer.render(
+        scene,
+        holoCamera
+    );
+}
+
+
+
+
+/* =========================================================
+   RESIZE
+========================================================= */
+
+
+function onResize() {
+
+
+    renderer.setSize(
+        window.innerWidth,
+        window.innerHeight
+    );
+
+
+    holoCamera.aspect =
+        window.innerWidth /
+        window.innerHeight;
+
+
+    holoCamera.updateProjectionMatrix();
+}
+
+
+
+
+/* =========================================================
+   CAMERA
+========================================================= */
+
+
+async function startCamera() {
+
+
+    statusEl.textContent =
+        "Starting camera...";
+
+
+    try {
+
+
+        /*
+            Try rear camera first.
+
+
+            On phone:
+            back/rear camera.
+
+
+            On laptop:
+            fallback to normal webcam.
+        */
+
+
+        try {
+
+
+            cameraStream =
+                await navigator.mediaDevices.getUserMedia({
+
+
+                    video: {
+                        facingMode: {
+                            ideal: "environment"
+                        },
+
+
+                        width: {
+                            ideal: 1280
+                        },
+
+
+                        height: {
+                            ideal: 720
+                        }
+                    },
+
+
+                    audio: false
+                });
+
+
+        } catch (firstError) {
+
+
+            cameraStream =
+                await navigator.mediaDevices.getUserMedia({
+
+
+                    video: {
+                        width: {
+                            ideal: 1280
+                        },
+
+
+                        height: {
+                            ideal: 720
+                        }
+                    },
+
+
+                    audio: false
+                });
+        }
+
+
+
+
+        video.srcObject =
+            cameraStream;
+
+
+        await video.play();
+
+
+        arStarted = true;
+
+
+        startScreen.style.display =
+            "none";
+
+
+        statusEl.textContent =
+            "Camera ready — show marker";
+
+
+        startMarkerDetection();
+
+
+        startHandTracking();
+
+
+    } catch (error) {
+
+
+        console.error(error);
+
+
+        statusEl.textContent =
+            "Camera permission required";
+    }
+}
+
+
+
+
+/* =========================================================
+   MARKER IMAGE
+========================================================= */
+
+
+const MARKER_PATH =
+    "assets/marker.png";
+
+
+
+
+function loadMarker() {
+
+
+    const image =
+        new Image();
+
+
+    image.onload = function() {
+
+
+        const canvas =
+            document.createElement("canvas");
+
+
+        canvas.width =
+            image.width;
+
+
+        canvas.height =
+            image.height;
+
+
+        const ctx =
+            canvas.getContext("2d");
+
+
+        ctx.drawImage(
+            image,
+            0,
+            0
+        );
+
+
+        try {
+
+
+            markerTemplate =
+                cv.imread(canvas);
+
+
+            const gray =
+                new cv.Mat();
+
+
+            cv.cvtColor(
+                markerTemplate,
+                gray,
+                cv.COLOR_RGBA2GRAY
+            );
+
+
+            markerTemplate.delete();
+
+
+            markerTemplate =
+                gray;
+
+
+            /*
+                Slightly improve detection at
+                different distances.
+            */
+
+
+            const blurred =
+                new cv.Mat();
+
+
+            cv.GaussianBlur(
+                markerTemplate,
+                blurred,
+                new cv.Size(3, 3),
+                0
+            );
+
+
+            markerTemplate.delete();
+
+
+            markerTemplate =
+                blurred;
+
+
+            cvReady = true;
+
+
+            console.log(
+                "Marker loaded:",
+                image.width,
+                image.height
+            );
+
+
+        } catch (error) {
+
+
+            console.error(
+                "OpenCV marker error:",
+                error
+            );
+        }
+    };
+
+
+    image.onerror = function() {
+
+
+        console.error(
+            "Could not load:",
+            MARKER_PATH
+        );
+
+
+        statusEl.textContent =
+            "Marker image not found";
+    };
+
+
+    image.src =
+        MARKER_PATH;
+}
+
+
+
+
+/* =========================================================
+   OPENCV HELPERS
+========================================================= */
+
+
+function clamp(
+    value,
+    min,
+    max
+) {
+
+
+    return Math.max(
+        min,
+        Math.min(max, value)
+    );
+}
+
+
+
+
+/* =========================================================
+   MARKER DETECTION
+========================================================= */
+
+
+function detectMarker() {
+
+
+    if (
+        !arStarted ||
+        !cvReady ||
+        !markerTemplate ||
+        video.readyState < 2
+    ) {
+        return;
+    }
+
+
+
+
+    const width = 640;
+
+
+    const aspect =
+        video.videoHeight /
+        video.videoWidth;
+
+
+    const height =
+        Math.round(
+            width * aspect
+        );
+
+
+
+
+    processingCanvas.width =
+        width;
+
+
+    processingCanvas.height =
+        height;
+
+
+
+
+    const ctx =
+        processingCanvas.getContext(
+            "2d",
+            {
+                willReadFrequently: true
+            }
+        );
+
+
+    ctx.drawImage(
+        video,
+        0,
+        0,
+        width,
+        height
+    );
+
+
+
+
+    let frame;
+
+
+    try {
+
+
+        frame =
+            cv.imread(
+                processingCanvas
+            );
+
+
+    } catch (error) {
+
+
+        return;
+    }
+
+
+
+
+    const gray =
+        new cv.Mat();
+
+
+    cv.cvtColor(
+        frame,
+        gray,
+        cv.COLOR_RGBA2GRAY
+    );
+
+
+
+
+    const blurred =
+        new cv.Mat();
+
+
+    cv.GaussianBlur(
+        gray,
+        blurred,
+        new cv.Size(3, 3),
+        0
+    );
+
+
+
+
+    const templateW =
+        markerTemplate.cols;
+
+
+    const templateH =
+        markerTemplate.rows;
+
+
+
+
+    /*
+        MULTI-SCALE DETECTION
+
+
+        This is the important part for
+        detecting the marker from farther away.
+
+
+        Smaller scales allow the physical
+        marker to occupy fewer pixels.
+    */
+
+
+    const scales = [
+        0.22,
+        0.26,
+        0.30,
+        0.34,
+        0.40,
+        0.46,
+        0.52,
+        0.60,
+        0.70,
+        0.82,
+        0.95
+    ];
+
+
+
+
+    let bestScore = -1;
+    let bestX = 0;
+    let bestY = 0;
+    let bestW = 0;
+    let bestH = 0;
+
+
+
+
+    for (
+        let sIndex = 0;
+        sIndex < scales.length;
+        sIndex++
+    ) {
+
+
+        const scale =
+            scales[sIndex];
+
+
+
+
+        const w =
+            Math.round(
+                templateW * scale
+            );
+
+
+        const h =
+            Math.round(
+                templateH * scale
+            );
+
+
+
+
+        if (
+            w < 25 ||
+            h < 25 ||
+            w >= gray.cols ||
+            h >= gray.rows
+        ) {
+            continue;
+        }
+
+
+
+
+        const resized =
+            new cv.Mat();
+
+
+        cv.resize(
+            markerTemplate,
+            resized,
+            new cv.Size(w, h),
+            0,
+            0,
+            cv.INTER_AREA
+        );
+
+
+
+
+        const resultW =
+            gray.cols - w + 1;
+
+
+        const resultH =
+            gray.rows - h + 1;
+
+
+
+
+        if (
+            resultW <= 0 ||
+            resultH <= 0
+        ) {
+
+
+            resized.delete();
+            continue;
+        }
+
+
+
+
+        const result =
+            new cv.Mat(
+                resultH,
+                resultW,
+                cv.CV_32FC1
+            );
+
+
+
+
+        try {
+
+
+            cv.matchTemplate(
+                gray,
+                resized,
+                result,
+                cv.TM_CCOEFF_NORMED
+            );
+
+
+
+
+            const minMax =
+                cv.minMaxLoc(result);
+
+
+
+
+            if (
+                minMax.maxVal >
+                bestScore
+            ) {
+
+
+                bestScore =
+                    minMax.maxVal;
+
+
+                bestX =
+                    minMax.maxLoc.x;
+
+
+                bestY =
+                    minMax.maxLoc.y;
+
+
+                bestW = w;
+                bestH = h;
+            }
+
+
+        } catch (error) {
+
+
+            console.warn(
+                "Template match error",
+                error
+            );
+        }
+
+
+
+
+        resized.delete();
+        result.delete();
+    }
+
+
+
+
+    frame.delete();
+    gray.delete();
+    blurred.delete();
+
+
+
+
+    /*
+        More tolerant threshold.
+
+
+        This allows detection when marker
+        is farther from camera.
+    */
+
+
+    const DETECTION_THRESHOLD = 0.48;
+
+
+
+
+    if (
+        bestScore >=
+        DETECTION_THRESHOLD
+    ) {
+
+
+        markerVisible = true;
+        lastMarkerTime =
+            performance.now();
+
+
+
+
+        updateCubeFromMarker(
+            bestX,
+            bestY,
+            bestW,
+            bestH,
+            width,
+            height
+        );
+
+
+        statusEl.textContent =
+            "✓ Marker detected — AI Cube active";
+
+
+    } else {
+
+
+        /*
+            Small grace period.
+
+
+            Prevents flickering when marker
+            temporarily becomes weak.
+        */
+
+
+        if (
+            performance.now() -
+            lastMarkerTime >
+            350
+        ) {
+
+
+            markerVisible = false;
+
+
+            cubeGroup.visible =
+                false;
+
+
+            statusEl.textContent =
+                "Searching for marker...";
+        }
+    }
+}
+
+
+
+
+/* =========================================================
+   POSITION CUBE ABOVE MARKER
+========================================================= */
+
+
+function updateCubeFromMarker(
+    x,
+    y,
+    w,
+    h,
+    frameWidth,
+    frameHeight
+) {
+
+
+    if (!cubeGroup) {
+        return;
+    }
+
+
+
+
+    /*
+        Marker center.
+    */
+
+
+    const centerX =
+        x + w / 2;
+
+
+    const centerY =
+        y + h / 2;
+
+
+
+
+    /*
+        Convert camera coordinates
+        to normalized screen coordinates.
+    */
+
+
+    const screenX =
+        centerX / frameWidth;
+
+
+    const screenY =
+        centerY / frameHeight;
+
+
+
+
+    /*
+        Put cube ABOVE the marker.
+
+
+        Marker height affects vertical offset.
+    */
+
+
+    const markerHeightNormalized =
+        h / frameHeight;
+
+
+
+
+    const cubeX =
+        (screenX - 0.5) * 2;
+
+
+
+
+    const cubeY =
+        (0.5 - screenY) * 2
+        +
+        markerHeightNormalized * 0.60;
+
+
+
+
+    /*
+        Marker distance controls a reasonable
+        base position scale.
+
+
+        It does NOT stretch the cube.
+
+
+        X/Y/Z remain equal.
+    */
+
+
+    const markerScale =
+        clamp(
+            markerHeightNormalized /
+            0.32,
+            0.55,
+            1.10
+        );
+
+
+
+
+    cubeGroup.position.set(
+        cubeX * 2.7,
+        cubeY * 2.1,
+        0
+    );
+
+
+
+
+    /*
+        Base size from marker.
+
+
+        Hand will smoothly override this
+        when a hand is detected.
+    */
+
+
+    if (!handDetected) {
+
+
+        handScaleTarget =
+            markerScale * 0.72;
+    }
+
+
+
+
+    /*
+        Keep exact fixed rotation.
+
+
+        No marker rotation.
+    */
+
+
+    cubeGroup.rotation.x =
+        FIXED_ROTATION_X;
+
+
+    cubeGroup.rotation.y =
+        FIXED_ROTATION_Y;
+
+
+    cubeGroup.rotation.z =
+        FIXED_ROTATION_Z;
+
+
+
+
+    cubeGroup.visible =
+        true;
+}
+
+
+
+
+/* =========================================================
+   MARKER LOOP
+========================================================= */
+
+
+function startMarkerDetection() {
+
+
+    loadMarker();
+
+
+    function loop() {
+
+
+        if (arStarted) {
+            detectMarker();
+        }
+
+
+        requestAnimationFrame(
+            loop
+        );
+    }
+
+
+    loop();
+}
+
+
+
+
+/* =========================================================
+   MEDIAPIPE HANDS
+========================================================= */
+
+
+let hands = null;
+let handCamera = null;
+
+
+
+
+function startHandTracking() {
+
+
+    hands =
+        new Hands({
+            locateFile: function(file) {
+
+
+                return (
+                    "https://cdn.jsdelivr.net/npm/@mediapipe/hands/" +
+                    file
+                );
+            }
+        });
+
+
+
+
+    hands.setOptions({
+
+
+        maxNumHands: 1,
+
+
+        modelComplexity: 0,
+
+
+        minDetectionConfidence: 0.45,
+
+
+        minTrackingConfidence: 0.45
+    });
+
+
+
+
+    hands.onResults(
+        onHandResults
+    );
+
+
+
+
+    /*
+        MediaPipe Camera utility uses
+        the already running video element.
+    */
+
+
+    handCamera = new Camera(
+    video,
+    {
+        onFrame: async function() {
+            if (
+                arStarted &&
+                video.readyState >= 2 &&
+                video.videoWidth > 0 &&
+                video.videoHeight > 0
+            ) {
+                await hands.send({
+                    image: video
+                });
+            }
+        },
+
+
+        width: 640,
+        height: 480
+    }
+);
+
+
+handCamera.start();
+}
+
+
+
+
+/* =========================================================
+   HAND RESULT
+========================================================= */
+
+
+function onHandResults(results) {
+
+
+    if (
+        !results.multiHandLandmarks ||
+        results.multiHandLandmarks.length === 0
+    ) {
+
+
+        handDetected = false;
+
+
+        /*
+            IMPORTANT:
+
+
+            Do NOT reset handScaleTarget.
+
+
+            Cube keeps its last hand-controlled size
+            until a hand appears again.
+        */
+
+
+        return;
+    }
+
+
+
+
+    const landmarks =
+        results.multiHandLandmarks[0];
+
+
+
+
+    const thumb =
+        landmarks[4];
+
+
+    const index =
+        landmarks[8];
+
+
+
+
+    /*
+        Distance between thumb tip
+        and index finger tip.
+    */
+
+
+    const dx =
+        thumb.x - index.x;
+
+
+    const dy =
+        thumb.y - index.y;
+
+
+    const dz =
+        (thumb.z || 0) -
+        (index.z || 0);
+
+
+
+
+    const distance =
+        Math.sqrt(
+            dx * dx +
+            dy * dy +
+            dz * dz
+        );
+
+
+
+
+    /*
+        Close fingers = small cube.
+
+
+        Far fingers = big cube.
+    */
+
+
+    const minDistance = 0.025;
+const maxDistance = 0.30;
+
+
+
+
+    let normalized =
+        (
+            distance -
+            minDistance
+        ) /
+        (
+            maxDistance -
+            minDistance
+        );
+
+
+
+
+    normalized =
+        clamp(
+            normalized,
+            0,
+            1
+        );
+
+
+
+
+    /*
+        Hand-controlled cube size.
+
+
+        X/Y/Z all receive exactly the
+        same value.
+    */
+
+
+    const minScale = 0.35;
+const maxScale = 1.25;
+
+
+
+
+    handScaleTarget =
+        minScale +
+        normalized *
+        (
+            maxScale -
+            minScale
+        );
+
+
+
+
+    handDetected = true;
+}
+
+
+
+
+/* =========================================================
+   MATH LESSON  (Grade 6-8 : Cube Mathematics)
+   Added on top of the original hologram cube.
+   Marker detection / hand scaling code is NOT changed.
+========================================================= */
+
+
+const SIDE_LENGTH = 5;                          // cm
+const VOLUME      = Math.pow(SIDE_LENGTH, 3);   // 125
+const FACE_AREA   = SIDE_LENGTH * SIDE_LENGTH;  // 25
+const SURFACE     = 6 * FACE_AREA;              // 150
+
+const LESSON_TEXT = {
+    intro: "This is a cube.",
+    vertices: "A cube has eight vertices.",
+    edges: "A cube has twelve edges.",
+    faces: "A cube has six square faces.",
+    angle: "The angle between cube faces is ninety degrees.",
+    dimension: "All sides of a cube are equal.",
+    volume: "Volume equals side cubed.",
+    surface: "Surface area equals six times side squared."
+};
+
+const LESSON_ROT_SPEED = 0.5;     // radians / second (slow 360 turn)
+const LESSON_EXTRA_GRACE = 600;   // ms extra before lesson resets after marker loss
+
+
+/* ---------- VOICE ---------- */
+
+let voiceOn = true;
+let enVoice = null;
+
+function pickVoice() {
+    if (!("speechSynthesis" in window)) return null;
+    const list = speechSynthesis.getVoices().filter(v => /^en/i.test(v.lang));
+    return list.find(v => /en[-_]US/i.test(v.lang)) || list[0] || null;
+}
+
+if ("speechSynthesis" in window) {
+    speechSynthesis.onvoiceschanged = function () { enVoice = pickVoice(); };
+}
+
+function speak(text) {
+    if (!voiceOn || !("speechSynthesis" in window) || !text) return;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "en-US";
+    u.rate = 0.92;
+    enVoice = enVoice || pickVoice();
+    if (enVoice) u.voice = enVoice;
+    speechSynthesis.speak(u);
+}
+
+function stopVoice() {
+    if ("speechSynthesis" in window) speechSynthesis.cancel();
+}
+
+function unlockSpeech() {   // iPhone Safari: must be called inside a tap
+    if (!("speechSynthesis" in window)) return;
+    const u = new SpeechSynthesisUtterance(" ");
+    u.volume = 0;
+    speechSynthesis.speak(u);
+}
+
+document.addEventListener("visibilitychange", function () {
+    if (document.hidden) stopVoice();
+});
+
+document.getElementById("muteBtn").addEventListener("click", function () {
+    voiceOn = !voiceOn;
+    this.textContent = voiceOn ? "🔊" : "🔇";
+    if (!voiceOn) stopVoice();
+});
+
+
+/* ---------- HUD ---------- */
+
+const lessonPanel = document.getElementById("lessonPanel");
+const lessonCard = document.getElementById("lessonCard");
+const lessonDots = document.getElementById("lessonDots");
+
+const PANEL_ROWS = [
+    "Vertices = 8",
+    "Edges = 12",
+    "Faces = 6",
+    "Length = Width = Height",
+    "Face Angle = 90°",
+    "Volume = Side³",
+    "Surface Area = 6 × Side²"
+];
+
+document.getElementById("lessonRows").innerHTML =
+    PANEL_ROWS.map(r => "<li>" + r + "</li>").join("");
+
+const rowEls = Array.from(document.querySelectorAll("#lessonRows li"));
+
+let hudSig = "";
+
+function renderHud(o) {
+    const sig = JSON.stringify(o);
+    if (sig === hudSig) return;
+    hudSig = sig;
+    lessonCard.querySelector(".tag").textContent = o.tag || "";
+    lessonCard.querySelector(".big").innerHTML = o.big || "";
+    lessonCard.querySelector(".lines").innerHTML =
+        (o.lines || []).map(l => "<div>" + l + "</div>").join("");
+}
+
+
+/* ---------- 3D HELPERS ---------- */
+
+const UP_AXIS = new THREE.Vector3(0, 1, 0);
+
+function rr(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+}
+
+function makeLabel(text, o) {
+    o = o || {};
+    const w = o.w || 256, h = o.h || 96;
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    const x = c.getContext("2d");
+    const tex = new THREE.CanvasTexture(c);
+    tex.minFilter = THREE.LinearFilter;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: tex, transparent: true, depthTest: false, depthWrite: false
+    }));
+    sp.renderOrder = 20;
+    let cur = "";
+    sp.userData.draw = function (t, fg, bg, font) {
+        const key = t + "|" + fg + "|" + bg;
+        if (key === cur) return;
+        cur = key;
+        x.clearRect(0, 0, w, h);
+        x.fillStyle = bg;
+        rr(x, 4, 4, w - 8, h - 8, h / 2 - 6);
+        x.fill();
+        x.lineWidth = 3; x.strokeStyle = fg; x.stroke();
+        x.fillStyle = fg;
+        x.font = "700 " + (font || Math.round(h * 0.5)) + "px Arial, sans-serif";
+        x.textAlign = "center"; x.textBaseline = "middle";
+        x.fillText(t, w / 2, h / 2 + 2);
+        tex.needsUpdate = true;
+    };
+    sp.userData.draw(text, o.fg || "#ffffff", o.bg || "rgba(2,14,20,.85)", o.font);
+    const sw = o.sw || 0.3;
+    sp.scale.set(sw, sw * h / w, 1);
+    return sp;
+}
+
+function cylBetween(a, b, r, mat) {
+    const dir = new THREE.Vector3().subVectors(b, a);
+    const len = dir.length();
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 8, 1), mat);
+    m.position.copy(a).addScaledVector(dir, 0.5);
+    m.quaternion.setFromUnitVectors(UP_AXIS, dir.clone().normalize());
+    return m;
+}
+
+
+/* ---------- LESSON 3D OBJECTS (children of cubeGroup) ---------- */
+
+let LV = [];                         // 8 vertex positions
+let vMat, vHot;
+let vertGroup, vertSpheres = [], vertLabels = [];
+let hotEdgeGroup, hotGlowMat;
+let lessonFaces = [], faceLabel;
+let angleGroup, angFillMat;
+let dimGroup, dimL, dimW, dimH;
+let volMesh;
+
+const FACE_DEFS = [
+    { n: [0, 0, 1],  c: 0xff5a5a },
+    { n: [1, 0, 0],  c: 0x5aff8a },
+    { n: [0, 0, -1], c: 0x5a8aff },
+    { n: [-1, 0, 0], c: 0xffc83c },
+    { n: [0, 1, 0],  c: 0xc85aff },
+    { n: [0, -1, 0], c: 0x3cffee }
+];
+
+function createLessonVisuals() {
+
+    const h = CUBE_SIZE / 2;
+
+    LV = [
+        [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
+        [-1, -1,  1], [1, -1,  1], [1, 1,  1], [-1, 1,  1]
+    ].map(a => new THREE.Vector3(a[0] * h, a[1] * h, a[2] * h));
+
+    /* vertices + labels V1..V8 */
+    vMat = new THREE.MeshBasicMaterial({ color: 0xbfffee });
+    vHot = new THREE.MeshBasicMaterial({ color: 0xffe600 });
+    const vGeo = new THREE.SphereGeometry(0.035, 16, 12);
+
+    vertGroup = new THREE.Group();
+    cubeGroup.add(vertGroup);
+
+    LV.forEach(function (v, i) {
+        const s = new THREE.Mesh(vGeo, vMat);
+        s.position.copy(v);
+        vertGroup.add(s);
+        vertSpheres.push(s);
+
+        const l = makeLabel("V" + (i + 1), { w: 128, h: 64, sw: 0.26 });
+        l.position.copy(v).add(v.clone().normalize().multiplyScalar(0.17));
+        vertGroup.add(l);
+        vertLabels.push(l);
+    });
+    vertGroup.visible = false;
+
+    /* yellow glowing edges (shown only in the Edges step) */
+    hotEdgeGroup = new THREE.Group();
+    const hotMat = new THREE.MeshBasicMaterial({ color: 0xffe600 });
+    hotGlowMat = new THREE.MeshBasicMaterial({
+        color: 0xffd400, transparent: true, opacity: 0.35,
+        blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]]
+        .forEach(function (p) {
+            hotEdgeGroup.add(cylBetween(LV[p[0]], LV[p[1]], 0.028, hotMat));
+            hotEdgeGroup.add(cylBetween(LV[p[0]], LV[p[1]], 0.07, hotGlowMat));
+        });
+    hotEdgeGroup.visible = false;
+    cubeGroup.add(hotEdgeGroup);
+
+    /* 6 faces */
+    FACE_DEFS.forEach(function (d) {
+        const n = new THREE.Vector3(d.n[0], d.n[1], d.n[2]);
+        const mat = new THREE.MeshBasicMaterial({
+            color: d.c, transparent: true, opacity: 0,
+            side: THREE.DoubleSide, depthWrite: false
+        });
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
+        m.position.copy(n).multiplyScalar(0.503);
+        m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n);
+        cubeGroup.add(m);
+        lessonFaces.push({ mat: mat, n: n });
+    });
+    faceLabel = makeLabel("Face 1", { w: 256, h: 96, sw: 0.5 });
+    faceLabel.visible = false;
+    cubeGroup.add(faceLabel);
+
+    /* 90 degree angle (corner V7, front face) */
+    angleGroup = new THREE.Group();
+    angleGroup.visible = false;
+    cubeGroup.add(angleGroup);
+
+    const angMat = new THREE.MeshBasicMaterial({ color: 0xff9a1a, depthTest: false, transparent: true });
+    angFillMat = new THREE.MeshBasicMaterial({
+        color: 0xff9a1a, transparent: true, opacity: 0.4,
+        side: THREE.DoubleSide, depthWrite: false
+    });
+    const R = 0.3, pts = [];
+    for (let i = 0; i <= 28; i++) {
+        const t = i / 28 * Math.PI / 2;
+        pts.push(new THREE.Vector3(0.5 - R * Math.cos(t), 0.5 - R * Math.sin(t), 0.505));
+    }
+    const arc = new THREE.Mesh(
+        new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, 0.014, 8, false), angMat);
+    arc.renderOrder = 15;
+    angleGroup.add(arc);
+
+    const sector = new THREE.Mesh(new THREE.CircleGeometry(R, 28, Math.PI, Math.PI / 2), angFillMat);
+    sector.position.set(0.5, 0.5, 0.504);
+    angleGroup.add(sector);
+
+    const sq = 0.1, zz = 0.51;
+    const pa = new THREE.Vector3(0.5 - sq, 0.5, zz);
+    const pb = new THREE.Vector3(0.5 - sq, 0.5 - sq, zz);
+    const pc2 = new THREE.Vector3(0.5, 0.5 - sq, zz);
+    const s1 = cylBetween(pa, pb, 0.008, angMat);
+    const s2 = cylBetween(pb, pc2, 0.008, angMat);
+    s1.renderOrder = 15; s2.renderOrder = 15;
+    angleGroup.add(s1, s2);
+
+    const angLabel = makeLabel("90°", { w: 192, h: 96, sw: 0.34, fg: "#ffb54d" });
+    angLabel.position.set(0.2, 0.2, 0.55);
+    angleGroup.add(angLabel);
+
+    /* dimension arrows */
+    dimGroup = new THREE.Group();
+    dimGroup.visible = false;
+    cubeGroup.add(dimGroup);
+
+    dimL = dimSet(new THREE.Vector3(-0.5, -0.68, 0.68), new THREE.Vector3(0.5, -0.68, 0.68),
+        0xff5a5a, "#ff8a8a", "Length = " + SIDE_LENGTH + " cm", new THREE.Vector3(0, -0.9, 0.9));
+    dimW = dimSet(new THREE.Vector3(0.68, -0.68, -0.5), new THREE.Vector3(0.68, -0.68, 0.5),
+        0x5aff8a, "#8affb0", "Width = " + SIDE_LENGTH + " cm", new THREE.Vector3(1.05, -0.88, 0));
+    dimH = dimSet(new THREE.Vector3(-0.68, -0.5, 0.68), new THREE.Vector3(-0.68, 0.5, 0.68),
+        0x5a9bff, "#8ab8ff", "Height = " + SIDE_LENGTH + " cm", new THREE.Vector3(-1.12, 0, 0.8));
+
+    /* volume : 5 x 5 x 5 small cubes that fill up */
+    const N = SIDE_LENGTH;
+    volMesh = new THREE.InstancedMesh(
+        new THREE.BoxGeometry(1, 1, 1),
+        new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.9 }),
+        N * N * N
+    );
+    const mtx = new THREE.Matrix4(), col = new THREE.Color();
+    const step = 1 / N, size = step * 0.82;
+    let k = 0;
+    for (let y = 0; y < N; y++)
+        for (let z = 0; z < N; z++)
+            for (let x = 0; x < N; x++) {
+                mtx.compose(
+                    new THREE.Vector3(-0.5 + step * (x + 0.5), -0.5 + step * (y + 0.5), -0.5 + step * (z + 0.5)),
+                    new THREE.Quaternion(),
+                    new THREE.Vector3(size, size, size));
+                volMesh.setMatrixAt(k, mtx);
+                col.setHSL(0.45 + y * 0.07, 0.85, 0.55);
+                volMesh.setColorAt(k, col);
+                k++;
+            }
+    volMesh.count = 0;
+    volMesh.frustumCulled = false;
+    volMesh.visible = false;
+    cubeGroup.add(volMesh);
+}
+
+function dimArrow(a, b, color) {
+    const g = new THREE.Group();
+    const mat = new THREE.MeshBasicMaterial({ color: color, depthTest: false, transparent: true });
+    const d = new THREE.Vector3().subVectors(b, a).normalize();
+    const shaft = cylBetween(a.clone().addScaledVector(d, 0.07), b.clone().addScaledVector(d, -0.07), 0.012, mat);
+    const c1 = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.1, 12), mat);
+    c1.position.copy(b).addScaledVector(d, -0.05);
+    c1.quaternion.setFromUnitVectors(UP_AXIS, d);
+    const c2 = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.1, 12), mat);
+    c2.position.copy(a).addScaledVector(d, 0.05);
+    c2.quaternion.setFromUnitVectors(UP_AXIS, d.clone().negate());
+    [shaft, c1, c2].forEach(function (m) { m.renderOrder = 15; });
+    g.add(shaft, c1, c2);
+    return g;
+}
+
+function dimSet(a, b, color, hex, text, labelPos) {
+    const g = new THREE.Group();
+    g.add(dimArrow(a, b, color));
+    const l = makeLabel(text, { w: 384, h: 96, sw: 0.78, fg: hex, font: 44 });
+    l.position.copy(labelPos);
+    g.add(l);
+    g.visible = false;
+    dimGroup.add(g);
+    return g;
+}
+
+
+/* ---------- VISUAL RESET (every frame, before a step draws) ---------- */
+
+function setVL(i, hot) {
+    vertLabels[i].userData.draw(
+        "V" + (i + 1),
+        hot ? "#ffe600" : "#bfffee",
+        hot ? "rgba(70,52,0,.92)" : "rgba(2,14,20,.85)");
+}
+
+function resetVisuals() {
+    vertGroup.visible = false;
+    vertSpheres.forEach(function (s, i) {
+        s.visible = true; s.scale.setScalar(1); s.material = vMat;
+        vertLabels[i].visible = true; setVL(i, false);
+    });
+    hotEdgeGroup.visible = false;
+    lessonFaces.forEach(function (f, i) { f.mat.opacity = 0; f.mat.color.setHex(FACE_DEFS[i].c); });
+    faceLabel.visible = false;
+    angleGroup.visible = false;
+    dimGroup.visible = false;
+    dimL.visible = dimW.visible = dimH.visible = false;
+    volMesh.visible = false;
+    if (centerGlow) centerGlow.visible = true;
+    if (innerCube) innerCube.visible = true;
+}
+
+
+/* ---------- LESSON STEPS ---------- */
+
+const STEPS = [
+
+    { key: "intro", dur: 3500, row: -1,
+      update: function (p, t) {
+        renderHud({ tag: "Step 1 / 8 · Introduction", big: "This is a Cube",
+                    lines: ["A 3D shape with equal square faces"] });
+      } },
+
+    { key: "vertices", dur: 6000, row: 0,
+      update: function (p, t) {
+        const k = Math.min(7, Math.floor(p / 0.9 * 8));
+        vertGroup.visible = true;
+        for (let i = 0; i < 8; i++) {
+            const show = i <= k;
+            vertSpheres[i].visible = show;
+            vertLabels[i].visible = show;
+            if (i === k && p < 0.92) {
+                vertSpheres[i].material = vHot;
+                vertSpheres[i].scale.setScalar(2 + 0.4 * Math.sin(p * 40));
+                setVL(i, true);
+            }
+        }
+        renderHud({ tag: "Step 2 / 8 · Vertices", big: "Vertices = " + (k + 1),
+                    lines: ["A vertex is a corner where edges meet", "Now counting: <b>V" + (k + 1) + "</b>"] });
+      } },
+
+    { key: "edges", dur: 4000, row: 1,
+      update: function (p, t) {
+        vertGroup.visible = true;
+        vertLabels.forEach(function (l) { l.visible = false; });
+        hotEdgeGroup.visible = true;
+        hotGlowMat.opacity = 0.30 + 0.15 * Math.sin(t * 6);
+        renderHud({ tag: "Step 3 / 8 · Edges", big: "Edges = 12",
+                    lines: ["An edge is a line where two faces meet"] });
+      } },
+
+    { key: "faces", dur: 6000, row: 2,
+      update: function (p, t) {
+        const k = Math.min(5, Math.floor(p / 0.95 * 6));
+        lessonFaces.forEach(function (f, i) { if (i < k) f.mat.opacity = 0.14; });
+        lessonFaces[k].mat.opacity = 0.5 + 0.12 * Math.sin(t * 8);
+        faceLabel.visible = true;
+        faceLabel.position.copy(lessonFaces[k].n).multiplyScalar(0.58);
+        faceLabel.userData.draw("Face " + (k + 1), "#ffffff", "rgba(2,14,20,.85)");
+        renderHud({ tag: "Step 4 / 8 · Faces", big: "Face " + (k + 1),
+                    lines: ["<b>Each face is a square.</b>", "Faces counted: " + (k + 1) + " / 6"] });
+      } },
+
+    { key: "angle", dur: 4500, row: 4,
+      update: function (p, t) {
+        lessonFaces[0].mat.color.setHex(0xff9a1a);
+        lessonFaces[0].mat.opacity = 0.18;
+        angleGroup.visible = true;
+        angFillMat.opacity = 0.32 + 0.14 * Math.sin(t * 5);
+        vertGroup.visible = true;
+        vertLabels.forEach(function (l) { l.visible = false; });
+        vertSpheres[6].material = vHot;
+        vertSpheres[6].scale.setScalar(2);
+        renderHud({ tag: "Step 5 / 8 · Angle", big: "Face Angle = 90°",
+                    lines: ["Faces meet at a right angle (a square corner)"] });
+      } },
+
+    { key: "dimension", dur: 4500, row: 3,
+      update: function (p, t) {
+        dimGroup.visible = true;
+        dimL.visible = p > 0.05;
+        dimW.visible = p > 0.25;
+        dimH.visible = p > 0.45;
+        const lines = [];
+        if (dimL.visible) lines.push("Length = " + SIDE_LENGTH + " cm");
+        if (dimW.visible) lines.push("Width = " + SIDE_LENGTH + " cm");
+        if (dimH.visible) lines.push("Height = " + SIDE_LENGTH + " cm");
+        renderHud({ tag: "Step 6 / 8 · Dimensions",
+                    big: p > 0.7 ? "Length = Width = Height" : "Dimensions", lines: lines });
+      } },
+
+    { key: "volume", dur: 5500, row: 5,
+      update: function (p, t) {
+        volMesh.visible = true;
+        volMesh.count = Math.floor(clamp((p - 0.12) / 0.7, 0, 1) * VOLUME);
+        if (centerGlow) centerGlow.visible = false;
+        if (innerCube) innerCube.visible = false;
+        const L = ["Volume = Side × Side × Side"];
+        if (p > 0.3) L.push(SIDE_LENGTH + " × " + SIDE_LENGTH + " × " + SIDE_LENGTH);
+        if (p > 0.6) L.push("<b>= " + VOLUME + " cm³</b>");
+        renderHud({ tag: "Step 7 / 8 · Volume", big: "Volume", lines: L });
+      } },
+
+    { key: "surface", dur: 6500, row: 6,
+      update: function (p, t) {
+        const L = ["Surface Area = 6 × Side²"];
+        if (p > 0.1 && p < 0.82) {
+            const k = Math.min(5, Math.floor((p - 0.1) / 0.12));
+            lessonFaces.forEach(function (f, i) { if (i < k) f.mat.opacity = 0.2; });
+            lessonFaces[k].mat.opacity = 0.55 + 0.1 * Math.sin(t * 8);
+            faceLabel.visible = true;
+            faceLabel.position.copy(lessonFaces[k].n).multiplyScalar(0.58);
+            faceLabel.userData.draw(FACE_AREA + " cm²", "#ffffff", "rgba(2,14,20,.85)");
+            L.push("Face " + (k + 1) + ": " + SIDE_LENGTH + "² = " + FACE_AREA +
+                   " cm²  ·  Total = " + (k + 1) * FACE_AREA + " cm²");
+        } else if (p >= 0.82) {
+            lessonFaces.forEach(function (f) { f.mat.opacity = 0.22; });
+            L.push("6 × " + SIDE_LENGTH + "²", "<b>= " + SURFACE + " cm²</b>");
+        }
+        renderHud({ tag: "Step 8 / 8 · Surface Area", big: "Surface Area", lines: L });
+      } }
+];
+
+lessonDots.innerHTML = STEPS.map(function () { return "<i></i>"; }).join("");
+const dotEls = Array.from(lessonDots.children);
+
+
+/* ---------- LESSON STATE MACHINE ---------- */
+
+const lesson = { active: false, step: -1, t0: 0, done: false };
+
+function startLesson() {
+    lesson.active = true;
+    lesson.done = false;
+    hudSig = "";
+    document.body.classList.add("lessonOn");
+    lessonPanel.classList.add("show");
+    lessonCard.classList.add("show");
+    goStep(0);
+}
+
+function goStep(i) {
+    lesson.step = i;
+    lesson.t0 = performance.now();
+    hudSig = "";
+    speak(LESSON_TEXT[STEPS[i].key]);
+    dotEls.forEach(function (d, j) {
+        d.classList.toggle("on", j < i);
+        d.classList.toggle("cur", j === i);
+    });
+    rowEls.forEach(function (r) { r.classList.remove("now"); });
+    if (STEPS[i].row >= 0) rowEls[STEPS[i].row].classList.add("lit", "now");
+}
+
+function finishLesson() {
+    lesson.done = true;
+    hudSig = "";
+    dotEls.forEach(function (d) { d.classList.add("on"); d.classList.remove("cur"); });
+    rowEls.forEach(function (r) { r.classList.remove("now"); r.classList.add("lit"); });
+    renderHud({
+        tag: "Lesson complete ✓", big: "Cube Mathematics",
+        lines: [
+            "8 vertices · 12 edges · 6 square faces",
+            "Volume = " + VOLUME + " cm³ · Surface Area = " + SURFACE + " cm²",
+            "<span style='font-size:12px;opacity:.75'>Hide the marker and show it again to replay</span>"
+        ]
+    });
+}
+
+function resetLesson() {
+    stopVoice();
+    lesson.active = false;
+    lesson.done = false;
+    lesson.step = -1;
+    hudSig = "";
+    resetVisuals();
+    document.body.classList.remove("lessonOn");
+    lessonPanel.classList.remove("show");
+    lessonCard.classList.remove("show");
+    rowEls.forEach(function (r) { r.classList.remove("lit", "now"); });
+    dotEls.forEach(function (d) { d.classList.remove("on", "cur"); });
+}
+
+function updateLesson(now, t) {
+    if (!lesson.active) return;
+    resetVisuals();
+    if (lesson.done) return;
+    const st = STEPS[lesson.step];
+    const p = Math.min(1, (now - lesson.t0) / st.dur);
+    st.update(p, t);
+    if (now - lesson.t0 >= st.dur) {
+        if (lesson.step < STEPS.length - 1) goStep(lesson.step + 1);
+        else finishLesson();
+    }
+}
+
+
+/* ---------- PER-FRAME HOOK (called from animateThree) ---------- */
+
+let lessonShown = false;
+let lessonLastNow = 0;
+let lessonLostSince = 0;
+let lessonSpin = FIXED_ROTATION_Y;
+
+function lessonFrame(t) {
+
+    if (!cubeGroup) return;
+
+    const now = performance.now();
+    const dt = Math.min(0.1, (now - lessonLastNow) / 1000 || 0.016);
+    lessonLastNow = now;
+
+    if (markerVisible) {
+
+        lessonLostSince = 0;
+
+        if (!lessonShown) {
+            lessonShown = true;
+            lessonSpin = FIXED_ROTATION_Y;
+            startLesson();
+        }
+
+    } else if (lessonShown) {
+
+        if (!lessonLostSince) lessonLostSince = now;
+
+        if (now - lessonLostSince > LESSON_EXTRA_GRACE) {
+            lessonShown = false;
+            lessonLostSince = 0;
+            resetLesson();
+            lessonSpin = FIXED_ROTATION_Y;
+            cubeGroup.rotation.y = FIXED_ROTATION_Y;
+        } else {
+            lesson.t0 += dt * 1000;      // pause the lesson during a short glitch
+        }
+        return;
+    }
+
+    if (!lessonShown) return;
+
+    /* slow 360 degree rotation while the marker is visible */
+    lessonSpin += LESSON_ROT_SPEED * dt;
+    cubeGroup.rotation.y = lessonSpin;
+
+    updateLesson(now, t);
+}
+
+
+
+
+/* =========================================================
+   START BUTTON
+========================================================= */
+
+
+startButton.addEventListener(
+    "click",
+    async function() {
+
+
+        if (arStarted) {
+            return;
+        }
+
+
+        startButton.disabled =
+            true;
+
+
+        startButton.textContent =
+            "STARTING...";
+
+
+        unlockSpeech();
+
+
+        await startCamera();
+
+
+    }
+);
+
+
+
+
+/* =========================================================
+   INITIALIZE
+========================================================= */
+
+
+initThree();
+
+
+
+
+/*
+    OpenCV loading.
+
+
+    OpenCV.js can take some time.
+*/
+
+
+if (
+    typeof cv !== "undefined"
+) {
+
+
+    if (
+        cv["onRuntimeInitialized"] !== undefined
+    ) {
+
+
+        cv["onRuntimeInitialized"] =
+            function() {
+
+
+                console.log(
+                    "OpenCV ready"
+                );
+
+
+                /*
+                    Marker is loaded when
+                    AR starts.
+                */
+            };
+    }
+}
+
+
+</script>
+
+
+</body>
+</html>
