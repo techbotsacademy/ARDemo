@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2-Feet Automatic Drone Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #090d16;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            user-select: none;
+        }
+        .container {
+            background: #1e293b;
+            padding: 40px;
+            border-radius: 24px;
+            text-align: center;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.6);
+            max-width: 450px;
+            width: 90%;
+        }
+        h1 {
+            color: #38bdf8;
+            margin-bottom: 5px;
+            font-size: 1.8rem;
+        }
+        p { color: #94a3b8; margin-bottom: 25px; }
+        
+        .status-display {
+            background: #020617;
+            border: 2px solid #38bdf8;
+            border-radius: 12px;
+            padding: 16px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #4ade80;
+            margin-bottom: 25px;
+            min-height: 25px;
+        }
+        
+        .btn-group {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .start-btn {
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            color: white;
+            font-size: 1.4rem;
+            font-weight: bold;
+            padding: 20px;
+            border: none;
+            border-radius: 16px;
+            cursor: pointer;
+            box-shadow: 0 8px 20px rgba(34, 197, 94, 0.4);
+            transition: all 0.2s ease;
+        }
+        
+        .stop-btn {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: white;
+            font-size: 1.2rem;
+            font-weight: bold;
+            padding: 16px;
+            border: none;
+            border-radius: 16px;
+            cursor: pointer;
+            box-shadow: 0 8px 20px rgba(239, 68, 68, 0.4);
+            transition: all 0.2s ease;
+        }
+
+        button:active {
+            transform: scale(0.96);
+        }
+
+        button:disabled {
+            background: #475569 !important;
+            box-shadow: none !important;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🎓 2-Feet Drone Demo</h1>
+    <p>Automatic Takeoff, Hover & Soft Landing</p>
+
+    <div id="status" class="status-display">STATUS: IDLE</div>
+
+    <div class="btn-group">
+        <button id="startBtn" class="start-btn" onclick="startDemo()">🚀 START 2-FEET DEMO</button>
+        <button id="stopBtn" class="stop-btn" onclick="emergencyStop()">🛑 EMERGENCY STOP</button>
+    </div>
+</div>
+
+<script>
+    async function startDemo() {
+        document.getElementById('startBtn').disabled = true;
+        try {
+            await fetch('/start-demo', { method: 'POST' });
+        } catch(e) {}
+    }
+
+    async function emergencyStop() {
+        try {
+            await fetch('/emergency-stop', { method: 'POST' });
+        } catch(e) {}
+    }
+
+    // Status sync with backend
+    setInterval(async () => {
+        try {
+            const res = await fetch('/status');
+            const data = await res.json();
+            
+            document.getElementById('status').innerText = data.state;
+            
+            if (data.isRunning) {
+                document.getElementById('startBtn').disabled = true;
+            } else {
+                document.getElementById('startBtn').disabled = false;
+            }
+        } catch(e) {}
+    }, 200);
+</script>
+
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real Drone Cockpit Controller</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #0f172a;
+            color: white;
+            text-align: center;
+            margin: 0;
+            padding: 15px;
+            user-select: none;
+        }
+        .dashboard {
+            background: #1e293b;
+            padding: 15px;
+            border-radius: 12px;
+            font-family: monospace;
+            color: #38bdf8;
+            margin-bottom: 15px;
+        }
+        .controls-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .panel {
+            background: #1e293b;
+            padding: 15px;
+            border-radius: 12px;
+        }
+        .d-pad {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 5px;
+            margin-top: 10px;
+        }
+        button {
+            padding: 15px;
+            font-weight: bold;
+            background: #334155;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        button:active { background: #0284c7; }
+        .stop-btn { background: #ef4444; width: 100%; grid-column: span 2; padding: 18px; font-size: 1.2rem; }
+        input[type=range] { width: 100%; height: 30px; }
+    </style>
+</head>
+<body>
+
+    <h2>🎮 LiteWing Pro Controller</h2>
+    <div id="status" class="dashboard">THRUST: 0 | ROLL: 0 | PITCH: 0 | YAW: 0</div>
+
+    <div class="controls-grid">
+      
+        <div class="panel">
+            <h3> Altitude (Height Control)</h3>
+            <p>Slide up to rise. Leave slider in place to <b>HOVER IN AIR</b>.</p>
+            <input type="range" id="throttle" min="0" max="45000" step="500" value="0" oninput="sendControl()">
+            <br><br>
+            <button onclick="setHover(36000)">📌 LOCK HOVER HEIGHT</button>
+            <button onclick="setHover(0)" style="background:#f59e0b;">🛬 GENTLE LAND</button>
+        </div>
+
+     
+        <div class="panel">
+            <h3> Direction Control</h3>
+            <div class="d-pad">
+                <div></div>
+                <button onclick="move('pitch', 8)">▲ FORWARD</button>
+                <div></div>
+                <button onclick="move('roll', -8)">◄ LEFT</button>
+                <button onclick="resetDirection()">🎯 CENTER</button>
+                <button onclick="move('roll', 8)">RIGHT ►</button>
+                <div></div>
+                <button onclick="move('pitch', -8)">▼ BACK</button>
+                <div></div>
+            </div>
+        </div>
+
+      
+        <button class="stop-btn" onclick="emergencyStop()">🛑 EMERGENCY STOP / CUT POWER</button>
+    </div>
+
+<script>
+    let currentRoll = 0;
+    let currentPitch = 0;
+    let currentYaw = 0;
+
+    function move(axis, val) {
+        if (axis === 'roll') currentRoll = val;
+        if (axis === 'pitch') currentPitch = val;
+        if (axis === 'yaw') currentYaw = val;
+        sendControl();
+    }
+
+    function resetDirection() {
+        currentRoll = 0;
+        currentPitch = 0;
+        currentYaw = 0;
+        sendControl();
+    }
+
+    function setHover(val) {
+        document.getElementById('throttle').value = val;
+        sendControl();
+    }
+
+    async function sendControl() {
+        const thrust = document.getElementById('throttle').value;
+        try {
+            const res = await fetch('/control', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    thrust: thrust,
+                    roll: currentRoll,
+                    pitch: currentPitch,
+                    yaw: currentYaw
+                })
+            });
+            const data = await res.json();
+            document.getElementById('status').innerText = 
+                `THRUST: ${data.thrust} | ROLL: ${data.roll} | PITCH: ${data.pitch} | YAW: ${data.yaw}`;
+        } catch(e) {}
+    }
+
+    async function emergencyStop() {
+        document.getElementById('throttle').value = 0;
+        resetDirection();
+        await fetch('/stop', { method: 'POST' });
+    }
+</script>
+</body>
+</html> -->
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LiteWing Smooth Flight Controller</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #0f172a;
+            color: #ffffff;
+            text-align: center;
+            padding: 25px;
+            margin: 0;
+        }
+        .card {
+            background: #1e293b;
+            max-width: 420px;
+            margin: 0 auto;
+            padding: 25px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+        }
+        h2 { color: #38bdf8; margin-top: 0; }
+        .status-box {
+            background: #090d16;
+            padding: 12px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 1.1rem;
+            color: #4ade80;
+            margin-bottom: 20px;
+        }
+        button {
+            width: 100%;
+            padding: 16px;
+            margin: 8px 0;
+            font-size: 1.1rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .btn-takeoff { background: #22c55e; color: #022c22; }
+        .btn-land { background: #f59e0b; color: #451a03; }
+        .btn-stop { background: #ef4444; color: #450a0a; }
+        button:active { transform: scale(0.97); }
+
+        .slider-container {
+            margin: 25px 0;
+            text-align: left;
+        }
+        label { font-size: 0.95rem; color: #cbd5e1; display: block; margin-bottom: 8px; }
+        input[type=range] {
+            width: 100%;
+            height: 10px;
+            border-radius: 5px;
+            background: #334155;
+            outline: none;
+        }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>LiteWing Gentle Control</h2>
+    <div id="status" class="status-box">State: IDLE | Power: 0</div>
+
+    <button class="btn-takeoff" onclick="takeoff()">🚁 LOW TAKEOFF (1-2 FT)</button>
+    
+    <div class="slider-container">
+        <label for="throttle">Manual Height Adjust (Thrust Control):</label>
+        <input type="range" id="throttle" min="0" max="48000" step="500" value="0" oninput="adjustThrust(this.value)">
+    </div>
+
+    <button class="btn-land" onclick="land()">🛬 SOFT LAND (GENTLE)</button>
+    <button class="btn-stop" onclick="stop()">🛑 EMERGENCY STOP</button>
+</div>
+
+<script>
+    async function apiPost(endpoint, bodyData = {}) {
+        try {
+            const res = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(bodyData)
+            });
+            const data = await res.json();
+            updateUI(data);
+        } catch(e) {
+            console.error('API Error', e);
+        }
+    }
+
+    function takeoff() {
+        document.getElementById('throttle').value = 38000;
+        apiPost('/takeoff');
+    }
+
+    function land() {
+        document.getElementById('throttle').value = 0;
+        apiPost('/land');
+    }
+
+    function stop() {
+        document.getElementById('throttle').value = 0;
+        apiPost('/stop');
+    }
+
+    function adjustThrust(val) {
+        apiPost('/set-thrust', { thrust: val });
+    }
+
+    function updateUI(data) {
+        if (data.thrust !== undefined) {
+            document.getElementById('status').innerText = `State: ${data.status || 'ACTIVE'} | Power: ${data.thrust}`;
+        }
+    }
+
+    // Auto Refresh Status
+    setInterval(async () => {
+        try {
+            const res = await fetch('/status');
+            const data = await res.json();
+            document.getElementById('status').innerText = `Mode: ${data.mode} | Power: ${data.thrust}`;
+        } catch(e) {}
+    }, 400);
+</script>
+
+</body>
+</html> -->
